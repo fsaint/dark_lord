@@ -5,10 +5,15 @@ import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.DeliveryState
 import com.fsaint.androidagent.model.VerificationState
+import com.fsaint.androidagent.runtime.AuditStore
+import com.fsaint.androidagent.runtime.EventStore
+import com.fsaint.androidagent.runtime.Escalation
+import com.fsaint.androidagent.runtime.EscalationStore
+import com.fsaint.androidagent.runtime.OwnerDecision
 import java.nio.charset.StandardCharsets
 
-class EventRepository(private val dao: EventDao) {
-    suspend fun enqueue(event: AgentEvent) {
+class EventRepository(private val dao: EventDao) : EventStore {
+    override suspend fun enqueue(event: AgentEvent) {
         dao.insert(
             EventEntity(
                 id = event.id,
@@ -25,11 +30,11 @@ class EventRepository(private val dao: EventDao) {
         AgentEvent(entity.id, entity.type, entity.source, entity.occurredAtEpochMs, EventPayloadCodec.decode(entity.payload))
     }
 
-    suspend fun markCompleted(eventId: String) = dao.markCompleted(eventId)
+    override suspend fun markCompleted(eventId: String) = dao.markCompleted(eventId)
 }
 
-class AuditRepository(private val dao: AuditRecordDao) {
-    suspend fun append(record: AuditRecord) {
+class AuditRepository(private val dao: AuditRecordDao) : AuditStore {
+    override suspend fun append(record: AuditRecord) {
         dao.insert(
             AuditRecordEntity(
                 id = record.id, occurredAtEpochMs = record.occurredAtEpochMs, eventId = record.eventId,
@@ -68,6 +73,20 @@ class DurableStateRepository(private val dao: DurableStateDao) {
     suspend fun save(value: EscalationEntity) = dao.putEscalation(value)
     suspend fun save(value: ToolExecutionEntity) = dao.putToolExecution(value)
     suspend fun save(value: VerificationOutcomeEntity) = dao.putVerificationOutcome(value)
+}
+
+class EscalationRepository(private val dao: DurableStateDao) : EscalationStore {
+    override suspend fun save(escalation: Escalation) {
+        dao.putEscalation(EscalationEntity(escalation.id, escalation.sessionId, "OPEN", EventPayloadCodec.encode(mapOf("recipient" to escalation.recipient, "question" to escalation.question, "reason" to escalation.reason, "proposedAction" to escalation.proposedAction))))
+    }
+
+    override suspend fun resolve(id: String, decision: OwnerDecision): Escalation? {
+        val entity = dao.escalation(id) ?: return null
+        if (entity.status != "OPEN") return null
+        dao.updateEscalationStatus(id, decision.name)
+        val fields = EventPayloadCodec.decode(entity.payload)
+        return Escalation(entity.id, entity.sessionId, fields.getValue("recipient"), fields.getValue("question"), fields.getValue("reason"), fields.getValue("proposedAction"))
+    }
 }
 
 private object EventPayloadCodec {

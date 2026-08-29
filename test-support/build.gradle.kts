@@ -16,6 +16,8 @@ tasks.withType<JavaCompile>().configureEach {
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:runtime"))
+    implementation(project(":core:policy"))
 
     testImplementation(kotlin("test"))
     testImplementation(libs.junit.jupiter)

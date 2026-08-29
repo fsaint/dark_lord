@@ -59,6 +59,8 @@ import com.fsaint.androidagent.model.VerificationState
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSkillVersion(value: SkillVersionEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSkillUpdateAttempt(value: SkillUpdateAttemptEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putEscalation(value: EscalationEntity)
+    @Query("SELECT * FROM escalations WHERE id = :id") suspend fun escalation(id: String): EscalationEntity?
+    @Query("UPDATE escalations SET status = :status WHERE id = :id") suspend fun updateEscalationStatus(id: String, status: String)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putToolExecution(value: ToolExecutionEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putVerificationOutcome(value: VerificationOutcomeEntity)
 }

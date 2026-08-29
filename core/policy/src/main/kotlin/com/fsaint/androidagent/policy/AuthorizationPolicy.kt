@@ -67,11 +67,11 @@ class ScopedContextBuilder(private val scopes: ScopeRegistry, private val memory
     }
 }
 
-class ScopedToolRouter(private val tools: Map<String, suspend (ToolCall) -> Any?>, private val scopes: ScopeRegistry = ScopeRegistry()) {
+class ScopedToolRouter(private val tools: Map<String, suspend (ToolCall) -> ToolResult<Any>>, private val scopes: ScopeRegistry = ScopeRegistry()) {
     suspend fun execute(session: ScopedAgentSession, call: ToolCall): ToolResult<Any> {
         if (!scopes.permits(session, ResourceType.TOOL, call.name)) return ToolResult(false, error = ToolError.SCOPE_DENIED)
         val tool = tools[call.name] ?: return ToolResult(false, error = ToolError.NOT_FOUND)
-        @Suppress("UNCHECKED_CAST") return ToolResult(true, payload = tool(call) as Any, verification = VerificationState.UNVERIFIED)
+        return tool(call)
     }
 }
 

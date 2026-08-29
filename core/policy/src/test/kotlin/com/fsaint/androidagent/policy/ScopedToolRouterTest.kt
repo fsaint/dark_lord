@@ -3,6 +3,8 @@ package com.fsaint.androidagent.policy
 import com.fsaint.androidagent.model.PrincipalRole
 import com.fsaint.androidagent.model.ToolCall
 import com.fsaint.androidagent.model.ToolError
+import com.fsaint.androidagent.model.ToolResult
+import com.fsaint.androidagent.model.VerificationState
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -19,7 +21,7 @@ class ScopedToolRouterTest {
 
     @Test
     fun ownerCanExecuteAnyRegisteredTool() = runTest {
-        val handler: suspend (ToolCall) -> Any? = { "72%" }
+        val handler: suspend (ToolCall) -> ToolResult<Any> = { ToolResult(true, "72%", verification = VerificationState.VERIFIED) }
         val owner = ScopeRegistry().sessionFor(Principal("owner", "+14155550123", PrincipalRole.OWNER), "local")
 
         val result = ScopedToolRouter(mapOf("device.battery" to handler)).execute(owner, ToolCall("device.battery"))
@@ -31,7 +33,7 @@ class ScopedToolRouterTest {
     @Test
     fun unknownCannotCallLocationEvenWhenPlannerRequestsIt() = runTest {
         val calls = mutableListOf<String>()
-        val handler: suspend (ToolCall) -> Any? = { _: ToolCall -> calls += "location.current"; "San Francisco" }
+        val handler: suspend (ToolCall) -> ToolResult<Any> = { _: ToolCall -> calls += "location.current"; ToolResult(true, "San Francisco", verification = VerificationState.VERIFIED) }
         val router = ScopedToolRouter(mapOf("location.current" to handler))
         val unknown = ScopeRegistry().sessionFor(Principal("unknown", null, PrincipalRole.UNKNOWN), "sms")
 
