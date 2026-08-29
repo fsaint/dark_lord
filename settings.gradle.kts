@@ -25,5 +25,6 @@ include(
     ":core:skills",
     ":test-support",
     ":capabilities:device",
+    ":capabilities:sms",
     ":oem:samsung-flip3",
 )
