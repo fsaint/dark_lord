@@ -20,11 +20,20 @@ android {
         compose = true
     }
 
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
     testOptions {
         unitTests.all {
             it.useJUnitPlatform()
         }
     }
+}
+
+kotlin {
+    compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
 }
 
 dependencies {
