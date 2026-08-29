@@ -10,6 +10,8 @@ ksp = "2.2.10-2.0.2"
 robolectric = "4.14.1"
 androidxTestCore = "1.6.1"
 sqlcipher = "4.13.0"
+lifecycle = "2.8.3"
+savedstate = "1.2.1"
 
 [libraries]
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
@@ -26,6 +28,8 @@ kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-c
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
+androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime", version.ref = "lifecycle" }
+androidx-savedstate = { module = "androidx.savedstate:savedstate", version.ref = "savedstate" }
 sqlcipher-android = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipher" }
 
 [plugins]

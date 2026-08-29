@@ -34,6 +34,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.lifecycle.runtime)
+    implementation(libs.androidx.savedstate)
 
     testImplementation(kotlin("test"))
     testImplementation(libs.junit.jupiter)

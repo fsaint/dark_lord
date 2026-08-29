@@ -25,6 +25,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
         <service
             android:name="com.fsaint.androidagent.oem.samsungflip3.AgentVoiceInteractionService"
@@ -41,6 +45,18 @@
             android:name="com.fsaint.androidagent.oem.samsungflip3.AgentVoiceInteractionSessionService"
             android:exported="false"
             android:permission="android.permission.BIND_VOICE_INTERACTION" />
+        <service
+            android:name="com.fsaint.androidagent.oem.samsungflip3.AgentRecognitionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_SPEECH_RECOGNITION_SERVICE">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech"
+                android:resource="@xml/recognition_service" />
+        </service>
         <service
             android:name=".voice.VoiceCaptureService"
             android:exported="false"
