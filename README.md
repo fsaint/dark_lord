@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="dark_lord.png" alt="Dark Lord" width="160">
+</p>
+
 # Android Agent
 
 Android Agent is a sideloaded, no-root Kotlin prototype that turns a dedicated Android phone into a scoped, multi-principal agent platform. It exposes device capabilities, events, skills, and MCP connections to an OpenAI-powered runtime while enforcing authorization below the model.
