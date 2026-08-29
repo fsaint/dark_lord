@@ -61,6 +61,8 @@ data class ToolResult<T>(
     val verification: VerificationState = VerificationState.UNVERIFIED,
 )
 
+data class ToolCall(val name: String, val arguments: Map<String, String> = emptyMap())
+
 data class CapabilityStatus(val available: Boolean, val details: Map<String, String> = emptyMap())
 interface AgentTool { val id: String }
 interface AgentCapability {
