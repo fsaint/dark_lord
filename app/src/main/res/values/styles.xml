@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.AndroidAgent" parent="android:style/Theme.Material.Light.NoActionBar" />
+</resources>
