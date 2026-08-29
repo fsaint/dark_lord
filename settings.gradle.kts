@@ -15,4 +15,15 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "android-agent"
-include(":app", ":core:model", ":core:runtime")
+include(
+    ":app",
+    ":core:model",
+    ":core:data",
+    ":core:runtime",
+    ":core:policy",
+    ":core:mcp",
+    ":core:skills",
+    ":test-support",
+    ":capabilities:device",
+    ":oem:samsung-flip3",
+)

@@ -13,3 +13,13 @@ kotlin {
 tasks.withType<JavaCompile>().configureEach {
     options.release.set(17)
 }
+
+dependencies {
+    implementation(project(":core:model"))
+
+    testImplementation(kotlin("test"))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test { useJUnitPlatform() }
