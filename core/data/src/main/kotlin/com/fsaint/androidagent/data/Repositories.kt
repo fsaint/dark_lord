@@ -4,7 +4,11 @@ import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.DeliveryState
+import com.fsaint.androidagent.model.PrincipalRole
 import com.fsaint.androidagent.model.VerificationState
+import com.fsaint.androidagent.policy.Principal
+import com.fsaint.androidagent.policy.PrincipalDirectory
+import com.fsaint.androidagent.policy.PrincipalRegistry
 import com.fsaint.androidagent.runtime.AuditStore
 import com.fsaint.androidagent.runtime.EventStore
 import com.fsaint.androidagent.runtime.Escalation
@@ -73,6 +77,38 @@ class DurableStateRepository(private val dao: DurableStateDao) {
     suspend fun save(value: EscalationEntity) = dao.putEscalation(value)
     suspend fun save(value: ToolExecutionEntity) = dao.putToolExecution(value)
     suspend fun save(value: VerificationOutcomeEntity) = dao.putVerificationOutcome(value)
+}
+
+class PrincipalRepository(
+    private val dao: DurableStateDao,
+    private val registry: PrincipalRegistry = PrincipalRegistry(),
+) : PrincipalDirectory {
+    override suspend fun owner(): Principal? = dao.owner()?.toPrincipal()
+
+    override suspend fun lookup(e164: String): Principal {
+        val normalized = registry.normalize(e164)
+        return dao.principalByE164(normalized)?.toPrincipal()
+            ?: Principal("unknown:$normalized", normalized, PrincipalRole.UNKNOWN)
+    }
+
+    override suspend fun list(): List<Principal> = dao.principals().map { it.toPrincipal() }
+
+    override suspend fun upsert(principal: Principal) {
+        val e164 = requireNotNull(principal.e164) { "Persisted principals require an E.164 number" }
+        dao.putPrincipal(
+            PrincipalEntity(
+                id = principal.id,
+                e164 = registry.normalize(e164),
+                role = principal.role.name,
+                displayName = principal.id,
+                content = null,
+            ),
+        )
+    }
+
+    override suspend fun removeKnown(e164: String): Boolean = dao.deleteKnown(registry.normalize(e164)) > 0
+
+    private fun PrincipalEntity.toPrincipal(): Principal = Principal(id, e164, PrincipalRole.valueOf(role))
 }
 
 class EscalationRepository(private val dao: DurableStateDao) : EscalationStore {

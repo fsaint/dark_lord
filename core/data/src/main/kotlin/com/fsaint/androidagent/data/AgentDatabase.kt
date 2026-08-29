@@ -4,19 +4,22 @@ import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.Insert
+import androidx.room.migration.Migration
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.PrimaryKey
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.DeliveryState
 import com.fsaint.androidagent.model.VerificationState
 
-@Entity(tableName = "principals") data class PrincipalEntity(@PrimaryKey val id: String, val e164: String, val role: String, val displayName: String?, val content: ByteArray?)
+@Entity(tableName = "principals", indices = [Index(value = ["e164"])]) data class PrincipalEntity(@PrimaryKey val id: String, val e164: String, val role: String, val displayName: String?, val content: ByteArray?)
 @Entity(tableName = "scope_grants") data class ScopeGrantEntity(@PrimaryKey val id: String, val principalId: String, val resourceType: String, val resourceId: String, val granted: Boolean)
 @Entity(tableName = "sessions") data class SessionEntity(@PrimaryKey val id: String, val principalId: String, val scopeId: String, val channel: String, val memoryNamespace: String, val createdAtEpochMs: Long)
 @Entity(tableName = "events") data class EventEntity(@PrimaryKey val id: String, val type: String, val source: String, val occurredAtEpochMs: Long, val payload: ByteArray, val deliveryState: String)
@@ -47,6 +50,10 @@ import com.fsaint.androidagent.model.VerificationState
 
 @Dao interface DurableStateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putPrincipal(value: PrincipalEntity)
+    @Query("SELECT * FROM principals WHERE e164 = :e164 LIMIT 1") suspend fun principalByE164(e164: String): PrincipalEntity?
+    @Query("SELECT * FROM principals WHERE role = 'OWNER' LIMIT 1") suspend fun owner(): PrincipalEntity?
+    @Query("SELECT * FROM principals ORDER BY role, displayName") suspend fun principals(): List<PrincipalEntity>
+    @Query("DELETE FROM principals WHERE e164 = :e164 AND role = 'KNOWN'") suspend fun deleteKnown(e164: String): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putScopeGrant(value: ScopeGrantEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSession(value: SessionEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putConversation(value: ConversationMessageEntity)
@@ -65,14 +72,25 @@ import com.fsaint.androidagent.model.VerificationState
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putVerificationOutcome(value: VerificationOutcomeEntity)
 }
 
-@Database(entities = [PrincipalEntity::class, ScopeGrantEntity::class, SessionEntity::class, EventEntity::class, ConversationMessageEntity::class, MemoryEntryEntity::class, ScheduleEntity::class, CapabilityStatusEntity::class, McpConfigurationEntity::class, OAuthMetadataEntity::class, SkillEntity::class, SkillVersionEntity::class, SkillUpdateAttemptEntity::class, EscalationEntity::class, ToolExecutionEntity::class, VerificationOutcomeEntity::class, AuditRecordEntity::class], version = 1, exportSchema = true)
+@Database(entities = [PrincipalEntity::class, ScopeGrantEntity::class, SessionEntity::class, EventEntity::class, ConversationMessageEntity::class, MemoryEntryEntity::class, ScheduleEntity::class, CapabilityStatusEntity::class, McpConfigurationEntity::class, OAuthMetadataEntity::class, SkillEntity::class, SkillVersionEntity::class, SkillUpdateAttemptEntity::class, EscalationEntity::class, ToolExecutionEntity::class, VerificationOutcomeEntity::class, AuditRecordEntity::class], version = 2, exportSchema = true)
 abstract class AgentDatabase : RoomDatabase() {
     abstract fun eventDao(): EventDao
     abstract fun auditRecordDao(): AuditRecordDao
     abstract fun durableStateDao(): DurableStateDao
+
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_principals_e164 ON principals (e164)")
+            }
+        }
+    }
 }
 
 object AgentDatabaseTestFactory {
-    fun open(context: Context, name: String): AgentDatabase = Room.databaseBuilder(context, AgentDatabase::class.java, name).allowMainThreadQueries().build()
+    fun open(context: Context, name: String): AgentDatabase = Room.databaseBuilder(context, AgentDatabase::class.java, name)
+        .addMigrations(AgentDatabase.MIGRATION_1_2)
+        .allowMainThreadQueries()
+        .build()
     fun inMemory(context: Context): AgentDatabase = Room.inMemoryDatabaseBuilder(context, AgentDatabase::class.java).allowMainThreadQueries().build()
 }

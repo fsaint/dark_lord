@@ -37,6 +37,7 @@ kotlin {
 }
 
 dependencies {
+    implementation(project(":core:model"))
     implementation(project(":core:data"))
     implementation(project(":core:runtime"))
     implementation(project(":core:policy"))
@@ -52,5 +53,6 @@ dependencies {
 
     testImplementation(kotlin("test"))
     testImplementation(libs.junit.jupiter)
+    testImplementation(libs.kotlinx.coroutines.test)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

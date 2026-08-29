@@ -11,6 +11,14 @@ enum class ResourceType { TOOL, MCP, MEMORY, SKILL }
 
 data class Principal(val id: String, val e164: String?, val role: PrincipalRole)
 
+interface PrincipalDirectory {
+    suspend fun owner(): Principal?
+    suspend fun lookup(e164: String): Principal?
+    suspend fun list(): List<Principal>
+    suspend fun upsert(principal: Principal)
+    suspend fun removeKnown(e164: String): Boolean
+}
+
 class PrincipalRegistry(principals: Iterable<Principal> = emptyList(), private val defaultCountryCode: String = "+1") {
     private val byPhone = principals.mapNotNull { principal -> principal.e164?.let(::normalize)?.let { it to principal } }.toMap()
     fun lookup(phoneNumber: String?): Principal? = phoneNumber?.let(::normalize)?.let(byPhone::get)

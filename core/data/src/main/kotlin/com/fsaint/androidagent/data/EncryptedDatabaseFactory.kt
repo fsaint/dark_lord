@@ -20,6 +20,7 @@ object EncryptedAgentDatabaseFactory {
         val passphrase = KeystoreDatabasePassphraseProvider(context.applicationContext).loadOrCreate()
         return Room.databaseBuilder(context, AgentDatabase::class.java, "agent.db")
             .openHelperFactory(SupportOpenHelperFactory(passphrase, null, true))
+            .addMigrations(AgentDatabase.MIGRATION_1_2)
             .build()
     }
 }
