@@ -28,6 +28,8 @@
     <application
         android:allowBackup="false"
         android:name=".DarkLordApplication"
+        android:icon="@drawable/dark_lord_icon"
+        android:roundIcon="@drawable/dark_lord_icon"
         android:label="Dark Lord"
         android:theme="@style/Theme.AndroidAgent">
         <activity
