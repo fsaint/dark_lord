@@ -17,9 +17,11 @@ tasks.withType<JavaCompile>().configureEach {
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:policy"))
+    implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(kotlin("test"))
     testImplementation(libs.junit.jupiter)
+    testImplementation(libs.kotlinx.coroutines.test)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
