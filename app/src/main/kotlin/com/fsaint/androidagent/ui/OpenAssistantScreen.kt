@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 fun OpenAssistantScreen(
     onRequestAssistantRole: () -> Unit,
     onRequestCapabilityPermissions: () -> Unit,
+    onRequestScreenCapture: (() -> Unit)? = null,
     onOpenPrincipalSettings: () -> Unit = {},
 ) {
     MaterialTheme {
@@ -31,6 +32,11 @@ fun OpenAssistantScreen(
             }
             Button(onClick = onRequestCapabilityPermissions, modifier = Modifier.padding(top = 8.dp)) {
                 Text("Grant microphone, camera, and SMS")
+            }
+            if (onRequestScreenCapture != null) {
+                Button(onClick = onRequestScreenCapture, modifier = Modifier.padding(top = 8.dp)) {
+                    Text("Allow one screen capture")
+                }
             }
             Button(onClick = onOpenPrincipalSettings, modifier = Modifier.padding(top = 8.dp)) {
                 Text("Communications settings")

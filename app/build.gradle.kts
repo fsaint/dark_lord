@@ -46,6 +46,7 @@ dependencies {
     implementation(project(":core:skills"))
     implementation(project(":capabilities:accessibility"))
     implementation(project(":capabilities:apps"))
+    implementation(project(":capabilities:screen"))
     implementation(project(":capabilities:device"))
     implementation(project(":capabilities:sms"))
     implementation(project(":capabilities:telephony"))

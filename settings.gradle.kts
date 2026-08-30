@@ -26,6 +26,7 @@ include(
     ":test-support",
     ":capabilities:accessibility",
     ":capabilities:apps",
+    ":capabilities:screen",
     ":capabilities:device",
     ":capabilities:sms",
     ":capabilities:telephony",

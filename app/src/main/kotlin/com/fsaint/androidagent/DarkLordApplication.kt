@@ -12,6 +12,8 @@ import com.fsaint.androidagent.capabilities.accessibility.AndroidAccessibilityAd
 import com.fsaint.androidagent.capabilities.apps.AppsCapability
 import com.fsaint.androidagent.capabilities.apps.PackageManagerAppsAdapter
 import com.fsaint.androidagent.capabilities.device.DeviceCapability
+import com.fsaint.androidagent.capabilities.screen.AndroidScreenCaptureAdapter
+import com.fsaint.androidagent.capabilities.screen.ScreenCapability
 import com.fsaint.androidagent.capabilities.notifications.AgentNotificationListenerServiceDependencies
 import com.fsaint.androidagent.capabilities.notifications.NotificationEventSink
 import com.fsaint.androidagent.capabilities.sms.SmsCapability
@@ -66,6 +68,8 @@ class DarkLordApplication : Application() {
     private val deviceCapability by lazy { DeviceCapability(this) }
     private val accessibilityCapability by lazy { AccessibilityCapability(AndroidAccessibilityAdapter(this)) }
     private val appsCapability by lazy { AppsCapability(PackageManagerAppsAdapter(this)) }
+    private val screenCaptureAdapter by lazy { AndroidScreenCaptureAdapter(this) }
+    private val screenCapability by lazy { ScreenCapability(screenCaptureAdapter) }
     private val scopes = ScopeRegistry()
     private val eventStore by lazy { EventRepository(database.eventDao()) }
     private val auditStore by lazy { AuditRepository(database.auditRecordDao()) }
@@ -91,7 +95,8 @@ class DarkLordApplication : Application() {
                 deviceCapability.toolHandlers() +
                     smsCapability.toolHandlers() +
                     appsCapability.toolHandlers() +
-                    accessibilityCapability.toolHandlers(),
+                    accessibilityCapability.toolHandlers() +
+                    screenCapability.toolHandlers(),
                 scopes,
             ),
             verification = VerificationEngine(),
@@ -146,6 +151,12 @@ class DarkLordApplication : Application() {
                 checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
             },
         )
+    }
+
+    fun createScreenCaptureConsentIntent(): Intent = screenCaptureAdapter.createConsentIntent()
+
+    fun acceptScreenCaptureGrant(resultCode: Int, data: Intent?) {
+        screenCaptureAdapter.acceptGrant(resultCode, data)
     }
 
     private fun dispatch(event: AgentEvent, channel: String) {

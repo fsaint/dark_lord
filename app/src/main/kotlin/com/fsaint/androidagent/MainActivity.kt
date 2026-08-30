@@ -40,6 +40,12 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartActivityForResult(),
     ) { }
 
+    private val requestScreenCapture = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        (application as DarkLordApplication).acceptScreenCaptureGrant(result.resultCode, result.data)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -57,6 +63,7 @@ class MainActivity : ComponentActivity() {
                 OpenAssistantScreen(
                     onRequestAssistantRole = ::requestAssistantRole,
                     onRequestCapabilityPermissions = ::requestCapabilityPermissions,
+                    onRequestScreenCapture = ::requestScreenCapture,
                     onOpenPrincipalSettings = { principalSettingsOpen = true },
                 )
             }
@@ -85,6 +92,10 @@ class MainActivity : ComponentActivity() {
             permissions += Manifest.permission.POST_NOTIFICATIONS
         }
         requestCapabilityPermissions.launch(permissions.toTypedArray())
+    }
+
+    private fun requestScreenCapture() {
+        requestScreenCapture.launch((application as DarkLordApplication).createScreenCaptureConsentIntent())
     }
 
     fun requestCommunicationsRoles() {
