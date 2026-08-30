@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -17,6 +19,28 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        val storeFilePath = providers.environmentVariable("DARK_LORD_RELEASE_STORE_FILE").orNull
+        if (!storeFilePath.isNullOrBlank()) {
+            create("prototypeRelease") {
+                storeFile = file(storeFilePath)
+                keyAlias = providers.environmentVariable("DARK_LORD_RELEASE_KEY_ALIAS").orNull
+                    ?: error("DARK_LORD_RELEASE_KEY_ALIAS is required when DARK_LORD_RELEASE_STORE_FILE is set")
+                storePassword = providers.environmentVariable("DARK_LORD_RELEASE_STORE_PASSWORD").orNull
+                    ?: error("DARK_LORD_RELEASE_STORE_PASSWORD is required when DARK_LORD_RELEASE_STORE_FILE is set")
+                keyPassword = providers.environmentVariable("DARK_LORD_RELEASE_KEY_PASSWORD").orNull
+                    ?: error("DARK_LORD_RELEASE_KEY_PASSWORD is required when DARK_LORD_RELEASE_STORE_FILE is set")
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("prototypeRelease") ?: signingConfigs.getByName("debug")
+        }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -30,6 +54,21 @@ android {
         unitTests.all {
             it.useJUnitPlatform()
         }
+    }
+}
+
+val releaseApk = layout.buildDirectory.file("outputs/apk/release/app-release.apk")
+tasks.register("releaseSha256") {
+    dependsOn("assembleRelease")
+    doLast {
+        val apk = releaseApk.get().asFile
+        check(apk.isFile) { "Release APK was not produced: ${apk.path}" }
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(apk.readBytes()).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        val output = layout.buildDirectory.file("outputs/apk/release/app-release.apk.sha256").get().asFile
+        output.writeText("$digest  ${apk.name}\n")
+        logger.lifecycle("Release artifact: ${apk.path}")
+        logger.lifecycle("Release SHA-256: $digest")
     }
 }
 
