@@ -10,9 +10,27 @@ The primary development device is a Samsung Galaxy Z Flip3 on Android 15. The pr
 
 ## Status
 
-Stage 10 release and acceptance gates are implemented and verified: the full Gradle gate passes, 15 connected acceptance smoke tests pass on the SM-F711U1, and a signed release APK is installed and checksummed. The 28-scenario checklist still identifies carrier, external MCP/Tailscale, posture/voice, and permission flows that require operator evidence. Stage 9 recovery, scheduling, Device Owner wiring, and bounded diagnostics are implemented and verified with automated tests. Stage 8 MCP and declarative skill foundations are implemented and verified with JVM tests. Stage 7 device capabilities are implemented and verified on the primary development device. Physical communication, network configuration, Device Owner provisioning, reboot recovery, and permission prompts remain explicit tester-operated procedures.
+The conversational harness and Stage 11 integration are implemented. The full Gradle gate passes, connected acceptance smoke tests pass on the SM-F711U1, and a signed release APK has been installed and checksummed. Carrier, external MCP/Tailscale, posture/voice, and permission flows still require operator evidence on target hardware.
+
+## Features
+
+- Side-button Assistant invocation with posture-aware open-screen and cover-screen experiences.
+- SMS receive, send, reply, delivery evidence, owner commands, and communications administration.
+- Dialer, incoming-call UI, CallKit-style in-call integration, and voice interaction services.
+- Notification listener and notification event ingestion.
+- Voice capture with Android SpeechRecognizer and spoken responses with TextToSpeech.
+- Device tools for battery/status, installed apps, camera, microphone, audio, radios, location and environment, sensors, NFC, USB, contacts, private files, and screen capture.
+- Scoped authorization by owner, known principal, and unknown principal, with scope-denied responses and escalation support.
+- Owner provisioning, principal management, capability permission flows, Device Owner support, reboot recovery, scheduling, audit records, and bounded diagnostics.
+- OpenAI Responses API conversational harness with model-selected tools, an eight-turn safety budget, one final SMS/voice response, and resumable Room-backed checkpoints.
+- Owner-only OpenAI API-key setup stored in Android Keystore; credentials are excluded from diagnostics, messages, and audit output.
+- MCP connection foundations with scoped discovery, OAuth metadata, Streamable HTTP seams, private Tailscale server support, and network failure handling.
+- Declarative skill manifests, validation, installation lifecycle, versioning, rollback, and scoped skill access.
+- Release signing, APK checksums, sideloading instructions, automated JVM/app tests, lint, and connected-device acceptance tests.
 
 ## Documentation
+
+- **[Getting started](docs/getting-started.md)** — build, install, provision, configure the model, and run the first SMS/voice test.
 
 - [Technical specification](SPEC.md)
 - [Approved architecture and design](docs/superpowers/specs/2026-08-29-android-agent-design.md)

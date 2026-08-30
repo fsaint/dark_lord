@@ -1,0 +1,51 @@
+# Getting started
+
+Dark Lord is an Android prototype intended for a dedicated, no-root device. The documented development target is a Samsung Galaxy Z Flip3 running Android 15.
+
+## Requirements
+
+- Android Studio with the repository's configured JDK/Android SDK.
+- An Android 15 device with USB debugging enabled.
+- An OpenAI API key for conversational responses.
+- ADB available on the development machine.
+
+## Build and install
+
+From the repository root:
+
+```sh
+./gradlew test lintDebug :app:assembleDebug
+adb devices
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+For the signed prototype artifact, use `./gradlew :app:assembleRelease` and follow the [sideloading guide](release/sideloading.md).
+
+## First-time device setup
+
+1. Launch **Dark Lord**.
+2. Grant microphone, camera, SMS, phone, and notification permissions when prompted.
+3. Set Dark Lord as the Assistant from the Side-button/Assistant settings.
+4. Open **Communications settings**, provision your owner number, and grant SMS/dialer roles as needed.
+5. Enable notification access for Dark Lord.
+6. Return to the main screen and enter the OpenAI key in **OpenAI API key (owner only)**, then tap **Save model key**. The key is encrypted with Android Keystore and is not sent through SMS or diagnostics.
+
+Detailed reset and Device Owner procedures are in the [device provisioning guide](device-provisioning/galaxy-z-flip3-reset-and-device-owner.md).
+
+## First test
+
+Send an SMS to the device, or invoke Dark Lord with the Side button, and ask a simple question such as `What is my battery level?` The model receives only the tools allowed by the active principal's scope. It may call a device tool and then sends one final response.
+
+To test voice, start voice capture, speak the same request, and confirm the response is spoken aloud. If no key is configured, Dark Lord returns a setup message instead of crashing.
+
+Use the [Stage 11 conversational harness checklist](device-test/stage-11-conversational-harness.md) for the complete smoke test. The [acceptance checklist](acceptance/flip3-prototype-checklist.md) tracks the broader device evidence still required.
+
+## Useful verification commands
+
+```sh
+./gradlew test lintDebug :app:assembleRelease
+./gradlew :app:releaseSha256
+adb shell pidof com.fsaint.androidagent
+```
+
+Keep API keys out of source control, shell history, screenshots, and bug reports.
