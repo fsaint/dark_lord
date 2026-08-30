@@ -21,6 +21,7 @@ import com.fsaint.androidagent.communications.CommunicationsReplySender
 import com.fsaint.androidagent.communications.AndroidPhoneNumberNormalizer
 import com.fsaint.androidagent.communications.OwnerSmsCommandHandler
 import com.fsaint.androidagent.communications.OwnerSmsCommandProcessor
+import com.fsaint.androidagent.communications.OwnerProvisioningService
 import com.fsaint.androidagent.data.AuditRepository
 import com.fsaint.androidagent.data.EncryptedAgentDatabaseFactory
 import com.fsaint.androidagent.data.EscalationRepository
@@ -62,6 +63,7 @@ class DarkLordApplication : Application() {
     private val scopes = ScopeRegistry()
     private val eventStore by lazy { EventRepository(database.eventDao()) }
     private val auditStore by lazy { AuditRepository(database.auditRecordDao()) }
+    val ownerProvisioning by lazy { OwnerProvisioningService(principals, auditStore) }
     private val phoneNumbers by lazy { AndroidPhoneNumberNormalizer(this) }
     private val replies by lazy {
         CommunicationsReplySender { recipient, text ->
