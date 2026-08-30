@@ -61,7 +61,7 @@ import com.fsaint.androidagent.policy.ScopedToolRouter
 import com.fsaint.androidagent.runtime.AgentRuntime
 import com.fsaint.androidagent.runtime.Escalation
 import com.fsaint.androidagent.runtime.EscalationService
-import com.fsaint.androidagent.runtime.ModelProvider
+import com.fsaint.androidagent.runtime.LegacyModelProvider
 import com.fsaint.androidagent.runtime.PlannedAction
 import com.fsaint.androidagent.runtime.VerificationEngine
 import com.fsaint.androidagent.runtime.ConversationHarness
@@ -314,7 +314,7 @@ internal fun isNotificationListenerEnabled(packageName: String, enabledListeners
         ?.any { it.packageName == packageName }
         ?: false
 
-private object EscalateUntilConfigured : ModelProvider {
+private object EscalateUntilConfigured : LegacyModelProvider {
     override suspend fun plan(
         session: com.fsaint.androidagent.model.ScopedAgentSession,
         event: AgentEvent,
