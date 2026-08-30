@@ -125,6 +125,7 @@ class CommunicationsDispatcherTest {
 
 private object EmptyPrincipalDirectory : PrincipalDirectory {
     override suspend fun owner(): Principal? = null
+    override suspend fun provisionInitialOwner(e164: String): Principal = error("Not supported by this test directory")
     override suspend fun lookup(e164: String): Principal? = null
     override suspend fun list(): List<Principal> = emptyList()
     override suspend fun upsert(principal: Principal) = Unit
@@ -133,6 +134,7 @@ private object EmptyPrincipalDirectory : PrincipalDirectory {
 
 private class SinglePrincipalDirectory(private val principal: Principal) : PrincipalDirectory {
     override suspend fun owner(): Principal? = null
+    override suspend fun provisionInitialOwner(e164: String): Principal = error("Not supported by this test directory")
     override suspend fun lookup(e164: String): Principal? = principal.takeIf { it.e164 == e164 }
     override suspend fun list(): List<Principal> = listOf(principal)
     override suspend fun upsert(principal: Principal) = Unit

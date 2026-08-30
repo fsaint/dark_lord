@@ -83,6 +83,19 @@ class PrincipalRepository(
 ) : PrincipalDirectory {
     override suspend fun owner(): Principal? = dao.owner()?.toPrincipal()
 
+    override suspend fun provisionInitialOwner(e164: String): Principal {
+        require(E164.matches(e164)) { "Initial owner requires an E.164 number" }
+        return dao.provisionInitialOwner(
+            PrincipalEntity(
+                id = "owner:$e164",
+                e164 = e164,
+                role = PrincipalRole.OWNER.name,
+                displayName = "Owner",
+                content = null,
+            ),
+        ).toPrincipal()
+    }
+
     override suspend fun lookup(e164: String): Principal {
         val source = e164.trim()
         return dao.principalByE164(source)?.toPrincipal()

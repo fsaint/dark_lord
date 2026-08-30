@@ -13,6 +13,7 @@ data class Principal(val id: String, val e164: String?, val role: PrincipalRole)
 
 interface PrincipalDirectory {
     suspend fun owner(): Principal?
+    suspend fun provisionInitialOwner(e164: String): Principal
     suspend fun lookup(e164: String): Principal?
     suspend fun list(): List<Principal>
     suspend fun upsert(principal: Principal)

@@ -41,6 +41,7 @@ class OwnerSmsCommandProcessorTest {
 
 private object EmptyDirectory : PrincipalDirectory {
     override suspend fun owner(): Principal? = null
+    override suspend fun provisionInitialOwner(e164: String): Principal = error("Not supported by this test directory")
     override suspend fun lookup(e164: String): Principal? = null
     override suspend fun list(): List<Principal> = emptyList()
     override suspend fun upsert(principal: Principal) = Unit

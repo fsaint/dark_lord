@@ -12,6 +12,7 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.PrimaryKey
+import androidx.room.Transaction
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AuditRecord
@@ -50,8 +51,16 @@ import com.fsaint.androidagent.model.VerificationState
 
 @Dao interface DurableStateDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putPrincipal(value: PrincipalEntity)
+    @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insertPrincipal(value: PrincipalEntity)
     @Query("SELECT * FROM principals WHERE e164 = :e164 LIMIT 1") suspend fun principalByE164(e164: String): PrincipalEntity?
     @Query("SELECT * FROM principals WHERE role = 'OWNER' LIMIT 1") suspend fun owner(): PrincipalEntity?
+    @Transaction
+    suspend fun provisionInitialOwner(value: PrincipalEntity): PrincipalEntity {
+        require(owner() == null) { "An owner is already provisioned" }
+        require(principalByE164(value.e164) == null) { "A principal already uses ${value.e164}" }
+        insertPrincipal(value)
+        return value
+    }
     @Query("SELECT * FROM principals ORDER BY role, displayName") suspend fun principals(): List<PrincipalEntity>
     @Query("DELETE FROM principals WHERE e164 = :e164 AND role = 'KNOWN'") suspend fun deleteKnown(e164: String): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putScopeGrant(value: ScopeGrantEntity)

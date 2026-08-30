@@ -85,6 +85,7 @@ private class RecordingPrincipalDirectory : PrincipalDirectory {
     var ownerPrincipal: Principal? = null
 
     override suspend fun owner(): Principal? = ownerPrincipal
+    override suspend fun provisionInitialOwner(e164: String): Principal = error("Not supported by this test directory")
     override suspend fun lookup(e164: String): Principal? = null
     override suspend fun list(): List<Principal> = saved
     override suspend fun upsert(principal: Principal) {
