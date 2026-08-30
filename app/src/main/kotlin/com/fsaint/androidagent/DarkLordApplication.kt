@@ -11,6 +11,12 @@ import com.fsaint.androidagent.capabilities.accessibility.AccessibilityCapabilit
 import com.fsaint.androidagent.capabilities.accessibility.AndroidAccessibilityAdapter
 import com.fsaint.androidagent.capabilities.apps.AppsCapability
 import com.fsaint.androidagent.capabilities.apps.PackageManagerAppsAdapter
+import com.fsaint.androidagent.capabilities.audio.AndroidAudioAdapter
+import com.fsaint.androidagent.capabilities.audio.AndroidMicrophoneAdapter
+import com.fsaint.androidagent.capabilities.audio.AudioCapability
+import com.fsaint.androidagent.capabilities.audio.MicrophoneCapability
+import com.fsaint.androidagent.capabilities.camera.AndroidCameraAdapter
+import com.fsaint.androidagent.capabilities.camera.CameraCapability
 import com.fsaint.androidagent.capabilities.device.DeviceCapability
 import com.fsaint.androidagent.capabilities.screen.AndroidScreenCaptureAdapter
 import com.fsaint.androidagent.capabilities.screen.ScreenCapability
@@ -68,6 +74,9 @@ class DarkLordApplication : Application() {
     private val deviceCapability by lazy { DeviceCapability(this) }
     private val accessibilityCapability by lazy { AccessibilityCapability(AndroidAccessibilityAdapter(this)) }
     private val appsCapability by lazy { AppsCapability(PackageManagerAppsAdapter(this)) }
+    private val cameraCapability by lazy { CameraCapability(AndroidCameraAdapter(this)) }
+    private val microphoneCapability by lazy { MicrophoneCapability(AndroidMicrophoneAdapter(this)) }
+    private val audioCapability by lazy { AudioCapability(AndroidAudioAdapter(this)) }
     private val screenCaptureAdapter by lazy { AndroidScreenCaptureAdapter(this) }
     private val screenCapability by lazy { ScreenCapability(screenCaptureAdapter) }
     private val scopes = ScopeRegistry()
@@ -96,7 +105,10 @@ class DarkLordApplication : Application() {
                     smsCapability.toolHandlers() +
                     appsCapability.toolHandlers() +
                     accessibilityCapability.toolHandlers() +
-                    screenCapability.toolHandlers(),
+                    screenCapability.toolHandlers() +
+                    cameraCapability.toolHandlers() +
+                    microphoneCapability.toolHandlers() +
+                    audioCapability.toolHandlers(),
                 scopes,
             ),
             verification = VerificationEngine(),

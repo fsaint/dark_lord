@@ -27,6 +27,8 @@ include(
     ":capabilities:accessibility",
     ":capabilities:apps",
     ":capabilities:screen",
+    ":capabilities:camera",
+    ":capabilities:audio",
     ":capabilities:device",
     ":capabilities:sms",
     ":capabilities:telephony",
