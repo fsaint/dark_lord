@@ -26,16 +26,15 @@ interface ToolProvider {
     suspend fun execute(scope: ScopeSnapshot, call: ValidatedToolCall): ToolResult<Any>
 }
 
-/** Only [ToolCatalog] can create this value, enforcing validation before execution. */
-class ValidatedToolCall private constructor(
-    val call: ToolCall,
-    val definition: ToolDefinition,
-) {
-    internal companion object { fun create(call: ToolCall, definition: ToolDefinition) = ValidatedToolCall(call, definition) }
+sealed interface ValidatedToolCall {
+    val call: ToolCall
+    val definition: ToolDefinition
 }
 
 /** Scope-filtered catalog validation kept below the model boundary. */
 class ToolCatalog(private val provider: ToolProvider) {
+    private data class IssuedCall(override val call: ToolCall, override val definition: ToolDefinition) : ValidatedToolCall
+
     suspend fun validate(scope: ScopeSnapshot, call: ToolCall): ToolValidation {
         if (call.name.isBlank()) return ToolValidation(null, ToolError.NOT_FOUND)
         val definition = provider.discover(scope).firstOrNull { it.id == call.name }
@@ -43,7 +42,7 @@ class ToolCatalog(private val provider: ToolProvider) {
         if (definition.requiredResource != null && definition.requiredResource !in scope.resources) {
             return ToolValidation(null, ToolError.SCOPE_DENIED)
         }
-        return ToolValidation(definition, validated = ValidatedToolCall.create(call, definition))
+        return ToolValidation(definition, validated = IssuedCall(call, definition))
     }
 }
 

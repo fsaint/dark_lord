@@ -18,6 +18,8 @@ Implemented the Android-free harness contract layer.
 ## Follow-up review fixes
 
 - `ToolProvider.execute` now accepts only the catalog-issued `ValidatedToolCall`; its constructor is private, so raw model calls cannot bypass catalog/scope validation.
+- Removed the internal issuance factory; no public constructor or factory can mint a validated call outside `ToolCatalog`.
+- Replaced the mintable top-level class with a sealed `ValidatedToolCall` interface and private catalog-issued implementation; raw or externally minted calls cannot satisfy `ToolProvider.execute`.
 - Validation and run-result failures use the existing model `ToolError` taxonomy. `CANCELLED` and `FAILED` were added to that normalized enum.
 - `ModelProvider.respond` is abstract. Legacy planning is explicit through `LegacyModelProvider` and `LegacyModelProviderAdapter`; current one-shot runtime users were migrated to the named legacy interface.
 - Added `AgentRunStateCodec` and round-trip tests for the durable state encoding.

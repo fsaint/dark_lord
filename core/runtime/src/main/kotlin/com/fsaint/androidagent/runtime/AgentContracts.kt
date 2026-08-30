@@ -59,6 +59,7 @@ data class AgentRunResult(
 interface AgentHarness {
     suspend fun run(request: AgentRequest): AgentRunResult
     suspend fun resume(runId: String): AgentRunResult
+    /** Requests cancellation and completes after the durable cancellation checkpoint is written. */
     suspend fun cancel(runId: String)
 
     companion object {

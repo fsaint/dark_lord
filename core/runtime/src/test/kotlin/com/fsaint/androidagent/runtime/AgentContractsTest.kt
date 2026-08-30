@@ -34,6 +34,11 @@ class AgentContractsTest {
         assertEquals(ToolError.NOT_FOUND, ToolCatalog(provider).validate(ScopeSnapshot(session), ToolCall("unknown")).error)
     }
 
+    @Test fun `validated tool call has no public issuance API`() {
+        assertEquals(0, ValidatedToolCall::class.java.declaredConstructors.size)
+        assertEquals(emptyList(), ValidatedToolCall::class.java.methods.filter { it.name == "create" })
+    }
+
     @Test fun `terminal states have stable serialization`() {
         AgentRunState.entries.forEach { assertEquals(it, AgentRunStateCodec.decode(AgentRunStateCodec.encode(it))) }
         assertEquals("TURN_LIMIT", AgentRunStateCodec.encode(AgentRunState.TURN_LIMIT))
