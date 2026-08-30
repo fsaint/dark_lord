@@ -24,6 +24,7 @@ kotlin {
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(libs.kotlinx.coroutines.core)
 
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation("androidx.test:runner:1.6.2")

@@ -6,6 +6,7 @@ import com.fsaint.androidagent.model.ToolResult
 
 interface CallHandle {
     val id: String
+    val telephoneHandle: String?
     val state: Int
     val capabilities: Int
 

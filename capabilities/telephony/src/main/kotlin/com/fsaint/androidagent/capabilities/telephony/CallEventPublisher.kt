@@ -14,17 +14,19 @@ class CallEventPublisher(
         val occurredAt = now()
         val state = call.state
         val capabilities = call.capabilities
+        val telephoneHandle = call.telephoneHandle
         sink.publish(
             AgentEvent(
                 id = "call:${call.id}:$state:$occurredAt",
                 type = "call.state",
-                source = call.id,
+                source = telephoneHandle ?: call.id,
                 occurredAtEpochMs = occurredAt,
-                payload = mapOf(
-                    "callId" to call.id,
-                    "state" to state.toString(),
-                    "capabilities" to capabilities.toString(),
-                ),
+                payload = buildMap {
+                    put("callId", call.id)
+                    put("state", state.toString())
+                    put("capabilities", capabilities.toString())
+                    telephoneHandle?.let { put("telephoneHandle", it) }
+                },
             ),
         )
     }
