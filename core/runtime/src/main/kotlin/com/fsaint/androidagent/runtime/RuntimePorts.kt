@@ -8,7 +8,16 @@ import com.fsaint.androidagent.policy.AgentContext
 
 interface EventStore { suspend fun enqueue(event: AgentEvent); suspend fun markCompleted(eventId: String) }
 interface AuditStore { suspend fun append(record: AuditRecord) }
-interface ModelProvider { suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction }
+interface ModelProvider {
+    /** Legacy one-shot entry point retained for existing runtime integrations. */
+    suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction {
+        throw UnsupportedOperationException("one-shot planning is not implemented")
+    }
+
+    suspend fun respond(request: ModelRequest): ModelResponse {
+        throw UnsupportedOperationException("conversational responses are not implemented")
+    }
+}
 interface ReplySender { suspend fun send(channel: String, recipient: String, text: String) }
 interface EscalationStore { suspend fun save(escalation: Escalation); suspend fun resolve(id: String, decision: OwnerDecision): Escalation? }
 
