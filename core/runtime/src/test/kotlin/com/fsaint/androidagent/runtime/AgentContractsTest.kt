@@ -39,9 +39,20 @@ class AgentContractsTest {
         assertEquals(emptyList(), ValidatedToolCall::class.java.methods.filter { it.name == "create" })
     }
 
+    @Test fun `validated calls cannot cross catalog or scope bindings`() = runBlocking {
+        val provider = object : ToolProvider {
+            override suspend fun discover(scope: ScopeSnapshot) = listOf(ToolDefinition("known", "", "{}", "test", null, Confirmation.NONE, 1, ""))
+            override suspend fun execute(scope: ScopeSnapshot, call: ValidatedToolCall): ToolResult<Any> = ToolResult(true, Unit)
+        }
+        val first = ToolCatalog(provider)
+        val issued = first.validate(ScopeSnapshot(session, id = "scope-a"), ToolCall("known")).validated!!
+        assertEquals(ToolError.SCOPE_DENIED, first.execute(ScopeSnapshot(session, id = "scope-b"), issued).error)
+        assertEquals(ToolError.SCOPE_DENIED, ToolCatalog(provider).execute(ScopeSnapshot(session, id = "scope-a"), issued).error)
+    }
+
     @Test fun `terminal states have stable serialization`() {
         AgentRunState.entries.forEach { assertEquals(it, AgentRunStateCodec.decode(AgentRunStateCodec.encode(it))) }
-        assertEquals("TURN_LIMIT", AgentRunStateCodec.encode(AgentRunState.TURN_LIMIT))
+        assertEquals("v1:turn_limit", AgentRunStateCodec.encode(AgentRunState.TURN_LIMIT))
     }
 
     @Test fun `safety budgets are eight turns and four calls`() {

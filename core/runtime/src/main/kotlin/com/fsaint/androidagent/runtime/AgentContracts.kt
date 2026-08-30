@@ -45,8 +45,24 @@ enum class Confirmation { NONE, USER_CONFIRMATION_REQUIRED, OWNER_APPROVAL_REQUI
 enum class AgentRunState { FINAL, TOOL_CALL, ESCALATE, CANCELLED, TURN_LIMIT, FAILED }
 
 object AgentRunStateCodec {
-    fun encode(state: AgentRunState): String = state.name
-    fun decode(encoded: String): AgentRunState = AgentRunState.valueOf(encoded)
+    private const val VERSION = "v1"
+    fun encode(state: AgentRunState): String = "$VERSION:${when (state) {
+        AgentRunState.FINAL -> "final"
+        AgentRunState.TOOL_CALL -> "tool_call"
+        AgentRunState.ESCALATE -> "escalate"
+        AgentRunState.CANCELLED -> "cancelled"
+        AgentRunState.TURN_LIMIT -> "turn_limit"
+        AgentRunState.FAILED -> "failed"
+    }}"
+    fun decode(encoded: String): AgentRunState = when (encoded) {
+        "v1:final" -> AgentRunState.FINAL
+        "v1:tool_call" -> AgentRunState.TOOL_CALL
+        "v1:escalate" -> AgentRunState.ESCALATE
+        "v1:cancelled" -> AgentRunState.CANCELLED
+        "v1:turn_limit" -> AgentRunState.TURN_LIMIT
+        "v1:failed" -> AgentRunState.FAILED
+        else -> throw IllegalArgumentException("Unknown agent run state wire tag")
+    }
 }
 
 data class AgentRunResult(
