@@ -7,6 +7,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.fsaint.androidagent.capabilities.camera.CameraAdapter
@@ -51,8 +55,8 @@ class PrototypeAcceptanceTest {
     }
 
     @Test fun diagnosticsSurfaceIsReachableFromAssistantSurface() {
-        var open = false
         compose.setContent {
+            var open by remember { mutableStateOf(false) }
             if (open) DebugScreen(DiagnosticsRepository(), onBack = {}) else OpenAssistantScreen(
                 onRequestAssistantRole = {}, onRequestCapabilityPermissions = {}, onOpenDiagnostics = { open = true },
             )

@@ -61,3 +61,19 @@ Record separate evidence for Assistant invocation with the phone open and closed
 ## Release gate
 
 Before declaring the prototype accepted, attach the output of the focused Gradle tests/lint, the connected test invocation, the release APK SHA-256, and the evidence records for all 28 rows. A `PASS` claim requires the evidence to match the scenario's path and device/network scope.
+
+## 2026-08-30 automated release evidence
+
+```text
+commit: 3c9aa5c (release build), followed by 835e638 (acceptance smoke test) and the final test-fix commit
+apk: app/build/outputs/apk/release/app-release.apk
+apk_sha256: f6ffebd9450dd2419acb7eb8468fb0f1a05af5c8cbbf2d4605a578ae543de21d
+device_serial: R5CRB0N64WH
+device_model_android: SM-F711U1 / Android 15
+release_gate: ./gradlew test lintDebug connectedCheck assembleRelease releaseSha256
+release_gate_result: PASS
+connected_result: 15/15 app tests passed
+install_result: PASS (adb install -r)
+```
+
+This automated record does not mark carrier, external MCP/Tailscale, or posture/voice scenarios as passed; those remain manual rows requiring operator evidence.
