@@ -37,6 +37,7 @@ fun OpenAssistantScreen(
     onRequestCapabilityPermissions: () -> Unit,
     onRequestScreenCapture: (() -> Unit)? = null,
     onOpenPrincipalSettings: () -> Unit = {},
+    onOpenNotificationListenerSettings: () -> Unit = {},
     onOpenDiagnostics: () -> Unit = {},
     onSaveOpenAiKey: (String) -> Unit = {},
     onOpenMcpSettings: () -> Unit = {},
@@ -74,6 +75,9 @@ fun OpenAssistantScreen(
                 Text("Device access", style = MaterialTheme.typography.titleLarge)
                 Button(onClick = onRequestAssistantRole, modifier = Modifier.fillMaxWidth()) { Text("Make Dark Lord your Assistant") }
                 OutlinedButton(onClick = onRequestCapabilityPermissions, modifier = Modifier.fillMaxWidth()) { Text("Grant microphone, camera, and SMS") }
+                OutlinedButton(onClick = onOpenNotificationListenerSettings, modifier = Modifier.fillMaxWidth()) {
+                    Text("Allow Dark Lord to read notifications")
+                }
                 if (onRequestScreenCapture != null) {
                     OutlinedButton(onClick = onRequestScreenCapture, modifier = Modifier.fillMaxWidth()) { Text("Allow one screen capture") }
                 }

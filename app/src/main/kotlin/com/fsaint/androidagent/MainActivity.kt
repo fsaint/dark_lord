@@ -78,6 +78,7 @@ class MainActivity : ComponentActivity() {
                     onRequestCapabilityPermissions = ::requestCapabilityPermissions,
                     onRequestScreenCapture = ::requestScreenCapture,
                     onOpenPrincipalSettings = { principalSettingsOpen = true },
+                    onOpenNotificationListenerSettings = ::openNotificationListenerSettings,
                     onOpenDiagnostics = { diagnosticsOpen = true },
                     onOpenMcpSettings = { mcpSettingsOpen = true },
                     onSaveOpenAiKey = { value -> lifecycleScope.launch { (application as DarkLordApplication).saveOpenAiApiKey(value) } },
