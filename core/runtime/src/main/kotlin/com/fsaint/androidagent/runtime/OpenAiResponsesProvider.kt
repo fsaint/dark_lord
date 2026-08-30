@@ -40,7 +40,10 @@ class OpenAiHttpClient(
         val key = runCatching { keyProvider.apiKey() }.getOrElse { throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED) }
         if (key.isBlank() || key.length > 512) throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED)
         val response = runCatching { transport.execute(OpenAiHttpRequest(endpoint, "Bearer $key", body, timeoutMillis)) }
-            .getOrElse { throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR, it::class.simpleName ?: "transport failure") }
+            .getOrElse {
+                val detail = listOfNotNull(it::class.simpleName, it.message?.take(160)).joinToString(": ")
+                throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR, detail.ifBlank { "transport failure" })
+            }
         if (response.status !in 200..299) {
             val error = if (response.status == 401 || response.status == 403) com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED else com.fsaint.androidagent.model.ToolError.NETWORK_ERROR
             throw OpenAiProviderException(error, "HTTP ${response.status}")
