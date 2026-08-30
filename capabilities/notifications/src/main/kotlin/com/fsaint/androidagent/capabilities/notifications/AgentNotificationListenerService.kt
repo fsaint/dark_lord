@@ -18,6 +18,10 @@ class AgentNotificationListenerService(
         connected = true
     }
 
+    override fun onListenerDisconnected() {
+        connected = false
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         if (!connected) return
 

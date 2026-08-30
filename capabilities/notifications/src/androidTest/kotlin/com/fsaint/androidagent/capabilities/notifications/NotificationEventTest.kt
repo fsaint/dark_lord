@@ -24,6 +24,19 @@ class NotificationEventTest {
     }
 
     @Test
+    fun listenerDoesNotPublishAfterDisconnection() {
+        val sink = RecordingNotificationEventSink()
+        val service = AgentNotificationListenerService(sink)
+
+        service.onListenerConnected()
+        service.onNotificationPosted(notification("pkg", "title", "body"))
+        service.onListenerDisconnected()
+        service.onNotificationPosted(notification("pkg", "title", "body"))
+
+        assertEquals(1, sink.events.size)
+    }
+
+    @Test
     fun connectedListenerPublishesSanitizedNotificationFields() {
         val sink = RecordingNotificationEventSink()
         val service = AgentNotificationListenerService(sink)
