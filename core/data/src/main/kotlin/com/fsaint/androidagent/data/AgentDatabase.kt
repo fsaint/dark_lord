@@ -66,6 +66,8 @@ import com.fsaint.androidagent.model.VerificationState
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putScopeGrant(value: ScopeGrantEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSession(value: SessionEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putConversation(value: ConversationMessageEntity)
+    @Query("SELECT * FROM conversation_messages WHERE sessionId = :sessionId ORDER BY createdAtEpochMs, id")
+    suspend fun conversation(sessionId: String): List<ConversationMessageEntity>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMemory(value: MemoryEntryEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSchedule(value: ScheduleEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putCapabilityStatus(value: CapabilityStatusEntity)

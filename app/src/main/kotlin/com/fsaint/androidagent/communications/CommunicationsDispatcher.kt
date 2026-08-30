@@ -15,6 +15,7 @@ class CommunicationsDispatcher(
 ) {
     suspend fun dispatch(event: AgentEvent, channel: String) {
         val principal = when (channel) {
+            "VOICE" -> principals.owner() ?: Principal("unknown:voice", null, PrincipalRole.UNKNOWN)
             "SMS" -> resolveTelephonePrincipal(event.source)
             "CALL" -> event.payload["telephoneHandle"]
                 ?.takeIf(String::isNotBlank)

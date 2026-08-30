@@ -8,6 +8,7 @@ import com.fsaint.androidagent.model.ToolError
 import com.fsaint.androidagent.model.VerificationState
 import com.fsaint.androidagent.policy.ScopedToolRouter
 import com.fsaint.androidagent.policy.ScopedContextBuilder
+import kotlinx.coroutines.CancellationException
 
 class AgentRuntime(
     private val events: EventStore,
@@ -18,9 +19,34 @@ class AgentRuntime(
     private val verification: VerificationEngine,
     private val replies: ReplySender,
     private val escalations: EscalationService? = null,
+    private val conversationHarness: ConversationHarness? = null,
 ) {
     suspend fun process(session: ScopedAgentSession, event: AgentEvent) {
         events.enqueue(event)
+        val harness = conversationHarness
+        if (harness != null) {
+            val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
+            val result = runCatching {
+                harness.run(
+                    ConversationRequest(
+                        session = session,
+                        event = event,
+                        context = contextBuilder.build(session),
+                        userText = event.payload["body"] ?: event.payload["text"].orEmpty(),
+                    ),
+                )
+            }.getOrElse {
+                if (it is CancellationException) throw it
+                replies.send(session.channel, recipient, "I can't reach the conversational model yet. Add an owner API key in Dark Lord settings.")
+                events.markCompleted(event.id)
+                return
+            }
+            result.response?.let { replies.send(session.channel, recipient, it) }
+            if (result.response != null || result.stopReason == ConversationStopReason.TURN_LIMIT) {
+                events.markCompleted(event.id)
+            }
+            return
+        }
         when (val action = planner.plan(session, event, contextBuilder.build(session))) {
             is PlannedAction.Tool -> processTool(session, event, action)
             is PlannedAction.Escalate -> {

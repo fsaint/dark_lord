@@ -45,6 +45,8 @@ import com.fsaint.androidagent.data.EncryptedAgentDatabaseFactory
 import com.fsaint.androidagent.data.EscalationRepository
 import com.fsaint.androidagent.data.EventRepository
 import com.fsaint.androidagent.data.PrincipalRepository
+import com.fsaint.androidagent.data.DurableStateRepository
+import com.fsaint.androidagent.data.RoomConversationCheckpointStore
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
@@ -61,6 +63,10 @@ import com.fsaint.androidagent.runtime.EscalationService
 import com.fsaint.androidagent.runtime.ModelProvider
 import com.fsaint.androidagent.runtime.PlannedAction
 import com.fsaint.androidagent.runtime.VerificationEngine
+import com.fsaint.androidagent.runtime.ConversationHarness
+import com.fsaint.androidagent.runtime.OpenAiHttpClient
+import com.fsaint.androidagent.runtime.OwnerOnlyOpenAiCredentialStore
+import com.fsaint.androidagent.runtime.CredentialOutcome
 import com.fsaint.androidagent.oem.samsungflip3.AgentSurfaceRegistry
 import com.fsaint.androidagent.oem.samsungflip3.AndroidDisplayProvider
 import com.fsaint.androidagent.oem.samsungflip3.DisplayBackedPostureProvider
@@ -69,11 +75,13 @@ import com.fsaint.androidagent.ui.CoverAssistantScreen
 import com.fsaint.androidagent.ui.CallScreenActivity
 import com.fsaint.androidagent.ui.CommunicationsAccessStatus
 import com.fsaint.androidagent.ui.OpenAssistantScreen
+import com.fsaint.androidagent.voice.SpeechTranscriptBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import android.speech.tts.TextToSpeech
 
 class DarkLordApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -106,13 +114,37 @@ class DarkLordApplication : Application() {
     private val screenCaptureAdapter by lazy { AndroidScreenCaptureAdapter(this) }
     private val screenCapability by lazy { ScreenCapability(screenCaptureAdapter) }
     private val scopes = ScopeRegistry()
+    private val agentTools by lazy {
+        ScopedToolRouter(
+            deviceCapability.toolHandlers() +
+                smsCapability.toolHandlers() +
+                appsCapability.toolHandlers() +
+                accessibilityCapability.toolHandlers() +
+                screenCapability.toolHandlers() +
+                cameraCapability.toolHandlers() +
+                microphoneCapability.toolHandlers() +
+                audioCapability.toolHandlers() +
+                radioCapability.toolHandlers() +
+                environmentCapability.toolHandlers(),
+            scopes,
+        )
+    }
+    private val openAiCredentials by lazy { OwnerOnlyOpenAiCredentialStore(AndroidOpenAiSecretStore(this)) }
+    private val conversationModel by lazy { OpenAiHttpClient(UrlConnectionOpenAiTransport(), openAiCredentials) }
+    private val conversationHarness by lazy {
+        ConversationHarness(conversationModel, agentTools, RoomConversationCheckpointStore(DurableStateRepository(database.durableStateDao())))
+    }
     private val eventStore by lazy { EventRepository(database.eventDao()) }
     private val auditStore by lazy { AuditRepository(database.auditRecordDao()) }
     val ownerProvisioning by lazy { OwnerProvisioningService(principals, auditStore) }
     private val phoneNumbers by lazy { AndroidPhoneNumberNormalizer(this) }
+    private val textToSpeech by lazy { TextToSpeech(this) { } }
     private val replies by lazy {
-        CommunicationsReplySender { recipient, text ->
-            smsCapability.replySender.send(recipient, text)
+        object : com.fsaint.androidagent.runtime.ReplySender {
+            override suspend fun send(channel: String, recipient: String, text: String) {
+                if (channel == "VOICE") textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, "dark-lord-response")
+                else smsCapability.replySender.send(recipient, text)
+            }
         }
     }
     private val escalationService by lazy {
@@ -126,22 +158,11 @@ class DarkLordApplication : Application() {
             audit = auditStore,
             planner = EscalateUntilConfigured,
             contextBuilder = ScopedContextBuilder(scopes, emptyMap()),
-            tools = ScopedToolRouter(
-                deviceCapability.toolHandlers() +
-                    smsCapability.toolHandlers() +
-                    appsCapability.toolHandlers() +
-                    accessibilityCapability.toolHandlers() +
-                    screenCapability.toolHandlers() +
-                    cameraCapability.toolHandlers() +
-                    microphoneCapability.toolHandlers() +
-                    audioCapability.toolHandlers() +
-                    radioCapability.toolHandlers() +
-                    environmentCapability.toolHandlers(),
-                scopes,
-            ),
+            tools = agentTools,
             verification = VerificationEngine(),
             replies = replies,
             escalations = escalationService,
+            conversationHarness = conversationHarness,
         )
     }
     private val dispatcher by lazy { CommunicationsDispatcher(principals, scopes, runtime, phoneNumbers) }
@@ -155,6 +176,12 @@ class DarkLordApplication : Application() {
         })
         applicationScope.launch {
             smsCapability.events().collect { event -> dispatch(event, "SMS") }
+        }
+        applicationScope.launch {
+            SpeechTranscriptBus.transcripts.collect { transcript ->
+                val owner = principals.owner() ?: return@collect
+                dispatch(AgentEvent("voice:${System.currentTimeMillis()}", "voice.transcript", "voice", System.currentTimeMillis(), mapOf("body" to transcript)), "VOICE")
+            }
         }
         AgentNotificationListenerServiceDependencies.configure(NotificationEventSink { event -> dispatch(event, "NOTIFICATION") })
         AgentInCallServiceDependencies.configure(
@@ -194,6 +221,11 @@ class DarkLordApplication : Application() {
     }
 
     fun createScreenCaptureConsentIntent(): Intent = screenCaptureAdapter.createConsentIntent()
+
+    suspend fun saveOpenAiApiKey(value: String): CredentialOutcome {
+        val owner = principals.owner() ?: return CredentialOutcome.DENIED
+        return openAiCredentials.set(owner, value)
+    }
 
     fun acceptScreenCaptureGrant(resultCode: Int, data: Intent?) {
         screenCaptureAdapter.acceptGrant(resultCode, data)

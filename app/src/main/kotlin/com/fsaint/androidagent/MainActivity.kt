@@ -18,6 +18,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.fsaint.androidagent.policy.Principal
 import com.fsaint.androidagent.ui.CommunicationsAccessStatus
 import com.fsaint.androidagent.ui.OpenAssistantScreen
@@ -70,6 +72,7 @@ class MainActivity : ComponentActivity() {
                     onRequestScreenCapture = ::requestScreenCapture,
                     onOpenPrincipalSettings = { principalSettingsOpen = true },
                     onOpenDiagnostics = { diagnosticsOpen = true },
+                    onSaveOpenAiKey = { value -> lifecycleScope.launch { (application as DarkLordApplication).saveOpenAiApiKey(value) } },
                 )
             }
         }

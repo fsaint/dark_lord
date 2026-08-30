@@ -65,6 +65,7 @@ class DurableStateRepository(private val dao: DurableStateDao) {
     suspend fun save(value: ScopeGrantEntity) = dao.putScopeGrant(value)
     suspend fun save(value: SessionEntity) = dao.putSession(value)
     suspend fun save(value: ConversationMessageEntity) = dao.putConversation(value)
+    suspend fun conversation(sessionId: String): List<ConversationMessageEntity> = dao.conversation(sessionId)
     suspend fun save(value: MemoryEntryEntity) = dao.putMemory(value)
     suspend fun save(value: ScheduleEntity) = dao.putSchedule(value)
     suspend fun save(value: CapabilityStatusEntity) = dao.putCapabilityStatus(value)

@@ -7,6 +7,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -19,7 +24,9 @@ fun OpenAssistantScreen(
     onRequestScreenCapture: (() -> Unit)? = null,
     onOpenPrincipalSettings: () -> Unit = {},
     onOpenDiagnostics: () -> Unit = {},
+    onSaveOpenAiKey: (String) -> Unit = {},
 ) {
+    var apiKey by remember { mutableStateOf("") }
     MaterialTheme {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -28,6 +35,16 @@ fun OpenAssistantScreen(
         ) {
             Text("Dark Lord", style = MaterialTheme.typography.headlineMedium)
             Text("Grant Assistant access to use the supported system invocation.")
+            OutlinedTextField(
+                value = apiKey,
+                onValueChange = { apiKey = it },
+                label = { Text("OpenAI API key (owner only)") },
+                modifier = Modifier.padding(top = 12.dp),
+                singleLine = true,
+            )
+            Button(onClick = { onSaveOpenAiKey(apiKey); apiKey = "" }, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Save model key")
+            }
             Button(onClick = onRequestAssistantRole, modifier = Modifier.padding(top = 16.dp)) {
                 Text("Make Dark Lord your Assistant")
             }
