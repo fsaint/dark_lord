@@ -48,6 +48,7 @@ class AgentContractsTest {
         val issued = first.validate(ScopeSnapshot(session, id = "scope-a"), ToolCall("known")).validated!!
         assertEquals(ToolError.SCOPE_DENIED, first.execute(ScopeSnapshot(session, id = "scope-b"), issued).error)
         assertEquals(ToolError.SCOPE_DENIED, ToolCatalog(provider).execute(ScopeSnapshot(session, id = "scope-a"), issued).error)
+        assertEquals(ToolError.SCOPE_DENIED, first.execute(ScopeSnapshot(session, id = "scope-a"), issued).error)
     }
 
     @Test fun `terminal states have stable serialization`() {

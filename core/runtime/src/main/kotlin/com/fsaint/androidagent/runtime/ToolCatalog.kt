@@ -33,7 +33,7 @@ sealed interface ValidatedToolCall {
 
 /** Scope-filtered catalog validation kept below the model boundary. */
 class ToolCatalog(private val provider: ToolProvider) {
-    private data class IssuedCall(override val call: ToolCall, override val definition: ToolDefinition, val catalog: ToolCatalog, val scopeId: String) : ValidatedToolCall
+    private data class IssuedCall(override val call: ToolCall, override val definition: ToolDefinition, val catalog: ToolCatalog, val scope: ScopeSnapshot) : ValidatedToolCall
 
     suspend fun validate(scope: ScopeSnapshot, call: ToolCall): ToolValidation {
         if (call.name.isBlank()) return ToolValidation(null, ToolError.NOT_FOUND)
@@ -42,13 +42,13 @@ class ToolCatalog(private val provider: ToolProvider) {
         if (definition.requiredResource != null && definition.requiredResource !in scope.resources) {
             return ToolValidation(null, ToolError.SCOPE_DENIED)
         }
-        return ToolValidation(definition, validated = IssuedCall(call, definition, this, scope.id))
+        return ToolValidation(definition, validated = IssuedCall(call, definition, this, scope))
     }
 
     suspend fun execute(scope: ScopeSnapshot, call: ValidatedToolCall): ToolResult<Any> {
         val issued = call as? IssuedCall
             ?: return ToolResult(false, error = ToolError.SCOPE_DENIED)
-        if (issued.catalog !== this || issued.scopeId != scope.id) return ToolResult(false, error = ToolError.SCOPE_DENIED)
+        if (issued.catalog !== this || issued.scope !== scope) return ToolResult(false, error = ToolError.SCOPE_DENIED)
         return provider.execute(scope, issued)
     }
 }
