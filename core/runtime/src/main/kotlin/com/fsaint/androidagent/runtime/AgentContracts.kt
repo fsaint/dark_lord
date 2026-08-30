@@ -26,11 +26,11 @@ sealed interface ModelResponse {
     data class Escalate(val question: String, val reason: String) : ModelResponse
 }
 
-data class ScopeSnapshot(
-    val session: ScopedAgentSession,
-    val resources: Set<String> = emptySet(),
-    val id: String = session.scopeId,
-) { init { require(id.isNotBlank()) } }
+class ScopeSnapshot(val session: ScopedAgentSession, resources: Set<String> = emptySet(), val id: String = session.scopeId) {
+    private val resourceSnapshot = resources.toSet()
+    val resources: Set<String> get() = resourceSnapshot
+    init { require(id.isNotBlank()) }
+}
 
 data class SkillDefinition(
     val id: String,

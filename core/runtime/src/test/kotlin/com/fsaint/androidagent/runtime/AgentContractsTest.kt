@@ -29,7 +29,7 @@ class AgentContractsTest {
     @Test fun `tool catalog rejects calls not present in discovered definitions`() = runBlocking {
         val provider = object : ToolProvider {
             override suspend fun discover(scope: ScopeSnapshot) = listOf(ToolDefinition("known", "", "{}", "test", null, Confirmation.NONE, 1, ""))
-            override suspend fun execute(scope: ScopeSnapshot, call: ValidatedToolCall): ToolResult<Any> = ToolResult(true, Unit)
+            override suspend fun execute(call: ValidatedToolCall): ToolResult<Any> = ToolResult(true, Unit)
         }
         assertEquals(ToolError.NOT_FOUND, ToolCatalog(provider).validate(ScopeSnapshot(session), ToolCall("unknown")).error)
     }
@@ -42,13 +42,20 @@ class AgentContractsTest {
     @Test fun `validated calls cannot cross catalog or scope bindings`() = runBlocking {
         val provider = object : ToolProvider {
             override suspend fun discover(scope: ScopeSnapshot) = listOf(ToolDefinition("known", "", "{}", "test", null, Confirmation.NONE, 1, ""))
-            override suspend fun execute(scope: ScopeSnapshot, call: ValidatedToolCall): ToolResult<Any> = ToolResult(true, Unit)
+            override suspend fun execute(call: ValidatedToolCall): ToolResult<Any> = ToolResult(true, Unit)
         }
         val first = ToolCatalog(provider)
         val issued = first.validate(ScopeSnapshot(session, id = "scope-a"), ToolCall("known")).validated!!
         assertEquals(ToolError.SCOPE_DENIED, first.execute(ScopeSnapshot(session, id = "scope-b"), issued).error)
         assertEquals(ToolError.SCOPE_DENIED, ToolCatalog(provider).execute(ScopeSnapshot(session, id = "scope-a"), issued).error)
         assertEquals(ToolError.SCOPE_DENIED, first.execute(ScopeSnapshot(session, id = "scope-a"), issued).error)
+    }
+
+    @Test fun `scope snapshot defensively copies resources`() {
+        val resources = mutableSetOf("allowed")
+        val snapshot = ScopeSnapshot(session, resources, "scope")
+        resources += "mutated"
+        assertEquals(setOf("allowed"), snapshot.resources)
     }
 
     @Test fun `terminal states have stable serialization`() {

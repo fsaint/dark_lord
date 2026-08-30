@@ -22,6 +22,7 @@ Implemented the Android-free harness contract layer.
 - Replaced the mintable top-level class with a sealed `ValidatedToolCall` interface and private catalog-issued implementation; raw or externally minted calls cannot satisfy `ToolProvider.execute`.
 - Bound issued calls to their originating catalog and scope identity; `ToolCatalog.execute` rejects cross-catalog and cross-scope reuse.
 - Binding uses the exact immutable `ScopeSnapshot` object identity, so same-ID snapshots with different resources are rejected. `ValidatedToolCall` remains sealed, preventing raw provider arguments.
+- Provider execution now accepts only the opaque validated call and no caller-supplied scope; resource sets are defensively copied at snapshot construction.
 - Replaced enum-name persistence with explicit versioned wire tags (`v1:final`, `v1:tool_call`, `v1:escalate`, `v1:cancelled`, `v1:turn_limit`, `v1:failed`) and round-trip coverage for every terminal state.
 - Validation and run-result failures use the existing model `ToolError` taxonomy. `CANCELLED` and `FAILED` were added to that normalized enum.
 - `ModelProvider.respond` is abstract. Legacy planning is explicit through `LegacyModelProvider` and `LegacyModelProviderAdapter`; current one-shot runtime users were migrated to the named legacy interface.

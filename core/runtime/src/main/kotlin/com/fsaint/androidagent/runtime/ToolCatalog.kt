@@ -23,7 +23,7 @@ data class ToolDefinition(
 
 interface ToolProvider {
     suspend fun discover(scope: ScopeSnapshot): List<ToolDefinition>
-    suspend fun execute(scope: ScopeSnapshot, call: ValidatedToolCall): ToolResult<Any>
+    suspend fun execute(call: ValidatedToolCall): ToolResult<Any>
 }
 
 sealed interface ValidatedToolCall {
@@ -49,7 +49,7 @@ class ToolCatalog(private val provider: ToolProvider) {
         val issued = call as? IssuedCall
             ?: return ToolResult(false, error = ToolError.SCOPE_DENIED)
         if (issued.catalog !== this || issued.scope !== scope) return ToolResult(false, error = ToolError.SCOPE_DENIED)
-        return provider.execute(scope, issued)
+        return provider.execute(issued)
     }
 }
 
