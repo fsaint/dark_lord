@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -58,7 +59,10 @@ fun PrincipalSettingsScreen(
 
     MaterialTheme {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+                .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text("Communications administration", style = MaterialTheme.typography.headlineSmall)
@@ -67,12 +71,27 @@ fun PrincipalSettingsScreen(
             Text("Notification access: ${status.notificationListenerEnabled.asAccessLabel()}")
             Text("Notification permission: ${status.postNotificationsPermissionGranted.asAccessLabel()}")
             Text("SMS and call permissions: ${status.capabilityPermissionsGranted.asAccessLabel()}")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onRequestRoles) { Text("Request SMS and dialer roles") }
-                Button(onClick = onRequestPermissions) { Text("Grant SMS and call permissions") }
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = onRequestRoles,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Request SMS and dialer roles") }
+                Button(
+                    onClick = onRequestPermissions,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Grant SMS and call permissions") }
             }
-            Button(onClick = onOpenNotificationListenerSettings) { Text("Open notification access settings") }
-            Button(onClick = { reload++ }) { Text("Refresh access status") }
+            Button(
+                onClick = onOpenNotificationListenerSettings,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Open notification access settings") }
+            Button(
+                onClick = { reload++ },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Refresh access status") }
 
             Text("Known principals", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
             OutlinedTextField(
@@ -104,7 +123,7 @@ fun PrincipalSettingsScreen(
                         reload++
                     }
                 }
-            }) { Text("Add known principal") }
+            }, modifier = Modifier.fillMaxWidth()) { Text("Add known principal") }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
             LazyColumn(modifier = Modifier.weight(1f)) {
@@ -123,7 +142,7 @@ fun PrincipalSettingsScreen(
                     }
                 }
             }
-            Button(onClick = onBack) { Text("Back") }
+            Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
         }
     }
 }
