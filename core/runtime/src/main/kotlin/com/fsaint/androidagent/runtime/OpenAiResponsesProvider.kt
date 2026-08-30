@@ -59,12 +59,15 @@ class OpenAiHttpClient(
 
     private fun requestBody(event: AgentEvent, context: AgentContext, userText: String = event.payload["body"].orEmpty(), transcript: ConversationTranscript? = null): String {
         val history = transcript?.turns.orEmpty().joinToString("\\n") { it.toString() }
-        val tools = context.resources.joinToString(",") { "{\"name\":\"${escape(it)}\"}" }
+        val tools = context.resources.joinToString(",") {
+            "{\"type\":\"function\",\"name\":\"${toolName(it)}\",\"description\":\"Phone capability: ${escape(it)}\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}"
+        }
         return "{\"model\":\"gpt-4o-mini\",\"input\":\"${escape(userText)}\\n${escape(history)}\",\"tools\":[$tools]}"
     }
 
     private fun field(json: String, name: String): String? = Regex("\\\"$name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"").find(json)?.groupValues?.get(1)
     private fun escape(value: String) = value.replace("\\", "\\\\").replace("\"", "\\\"").take(16_384)
+    private fun toolName(value: String) = value.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64).ifBlank { "phone_capability" }
 }
 
 class OpenAiProviderException(val error: com.fsaint.androidagent.model.ToolError) : RuntimeException(error.name)
