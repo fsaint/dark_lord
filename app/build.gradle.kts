@@ -54,6 +54,7 @@ dependencies {
     implementation(project(":capabilities:telephony"))
     implementation(project(":capabilities:notifications"))
     implementation(project(":capabilities:radios"))
+    implementation(project(":capabilities:environment"))
     implementation(project(":oem:samsung-flip3"))
 
     implementation(libs.androidx.activity.compose)
