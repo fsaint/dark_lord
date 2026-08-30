@@ -12,6 +12,7 @@ androidxTestCore = "1.6.1"
 sqlcipher = "4.13.0"
 lifecycle = "2.8.3"
 savedstate = "1.2.1"
+work = "2.10.1"
 
 [libraries]
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
@@ -30,6 +31,7 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 androidx-test-core = { module = "androidx.test:core", version.ref = "androidxTestCore" }
 androidx-lifecycle-runtime = { module = "androidx.lifecycle:lifecycle-runtime", version.ref = "lifecycle" }
 androidx-savedstate = { module = "androidx.savedstate:savedstate", version.ref = "savedstate" }
+androidx-work-runtime = { module = "androidx.work:work-runtime", version.ref = "work" }
 sqlcipher-android = { module = "net.zetetic:sqlcipher-android", version.ref = "sqlcipher" }
 
 [plugins]

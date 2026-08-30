@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.work.runtime)
 
     testImplementation(kotlin("test"))
     testImplementation(libs.junit.jupiter)
