@@ -39,6 +39,7 @@ fun OpenAssistantScreen(
     onOpenPrincipalSettings: () -> Unit = {},
     onOpenDiagnostics: () -> Unit = {},
     onSaveOpenAiKey: (String) -> Unit = {},
+    onOpenMcpSettings: () -> Unit = {},
 ) {
     var apiKey by remember { mutableStateOf("") }
     DarkLordTheme {
@@ -78,6 +79,7 @@ fun OpenAssistantScreen(
                 }
                 Text("Administration", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 4.dp))
                 OutlinedButton(onClick = onOpenPrincipalSettings, modifier = Modifier.fillMaxWidth()) { Text("Communications settings") }
+                OutlinedButton(onClick = onOpenMcpSettings, modifier = Modifier.fillMaxWidth()) { Text("MCP server settings") }
                 OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors()) { Text("Diagnostics") }
             }
         }
