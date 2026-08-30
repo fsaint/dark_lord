@@ -10,7 +10,7 @@ The primary development device is a Samsung Galaxy Z Flip3 on Android 15. The pr
 
 ## Status
 
-Planning and device-provisioning documentation are complete; application implementation has not started.
+The Stage 6 communications implementation has automated verification on the primary development device. Physical SMS, call, notification, and escalation acceptance remains an explicit tester-operated procedure.
 
 ## Documentation
 
@@ -18,6 +18,7 @@ Planning and device-provisioning documentation are complete; application impleme
 - [Approved architecture and design](docs/superpowers/specs/2026-08-29-android-agent-design.md)
 - [Implementation plan](docs/superpowers/plans/2026-08-29-android-agent-prototype.md)
 - [Galaxy Z Flip3 reset and Device Owner provisioning](docs/device-provisioning/galaxy-z-flip3-reset-and-device-owner.md)
+- [Stage 6 communications device acceptance checklist](docs/device-test/stage-6-communications.md)
 
 ## Intended stack
 
