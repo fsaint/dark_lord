@@ -26,4 +26,20 @@ class RoleQualificationTest {
             ).isEmpty(),
         )
     }
+
+    @Test
+    fun notificationListenerStatusMatchesWholeFlattenedComponentPackage() {
+        assertTrue(
+            isNotificationListenerEnabled(
+                "com.fsaint.androidagent",
+                "com.fsaint.androidagent/com.fsaint.androidagent.Listener:com.example.other/.Listener",
+            ),
+        )
+        assertFalse(
+            isNotificationListenerEnabled(
+                "com.fsaint.androidagent",
+                "com.fsaint.androidagent.other/.Listener",
+            ),
+        )
+    }
 }

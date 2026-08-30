@@ -2,6 +2,7 @@ package com.fsaint.androidagent
 
 import android.app.Application
 import android.app.role.RoleManager
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -115,8 +116,10 @@ class DarkLordApplication : Application() {
         return CommunicationsAccessStatus(
             smsRoleHeld = roleManager.isRoleHeld(RoleManager.ROLE_SMS),
             dialerRoleHeld = roleManager.isRoleHeld(RoleManager.ROLE_DIALER),
-            notificationListenerEnabled = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-                ?.contains(packageName) == true,
+            notificationListenerEnabled = isNotificationListenerEnabled(
+                packageName,
+                Settings.Secure.getString(contentResolver, "enabled_notification_listeners"),
+            ),
             postNotificationsPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
                 checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED,
             capabilityPermissionsGranted = COMMUNICATIONS_PERMISSIONS.all {
@@ -184,6 +187,13 @@ class DarkLordApplication : Application() {
 private fun String?.isAdministrativeCommand(): Boolean = this?.trim()?.let { command ->
     command.equals("STATUS", ignoreCase = true) || command.startsWith("KNOWN ", ignoreCase = true)
 } == true
+
+internal fun isNotificationListenerEnabled(packageName: String, enabledListeners: String?): Boolean =
+    enabledListeners
+        ?.split(':')
+        ?.mapNotNull(ComponentName::unflattenFromString)
+        ?.any { it.packageName == packageName }
+        ?: false
 
 private object EscalateUntilConfigured : ModelProvider {
     override suspend fun plan(

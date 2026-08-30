@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 data class SmsTool(override val id: String) : AgentTool
 
 class SmsCapability(context: Context) : AgentCapability, SmsEventSink {
-    private val eventFlow = MutableSharedFlow<AgentEvent>(extraBufferCapacity = 64)
+    private val eventFlow = MutableSharedFlow<AgentEvent>(replay = 64, extraBufferCapacity = 64)
     val receiver = SmsBroadcastReceiver(this)
     val replySender = SmsReplySender(context, this)
     private var current = CapabilityStatus(available = false)
