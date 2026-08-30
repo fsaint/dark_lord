@@ -33,5 +33,6 @@ include(
     ":capabilities:sms",
     ":capabilities:telephony",
     ":capabilities:notifications",
+    ":capabilities:radios",
     ":oem:samsung-flip3",
 )

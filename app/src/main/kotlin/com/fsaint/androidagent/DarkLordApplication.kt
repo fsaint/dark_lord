@@ -22,6 +22,8 @@ import com.fsaint.androidagent.capabilities.screen.AndroidScreenCaptureAdapter
 import com.fsaint.androidagent.capabilities.screen.ScreenCapability
 import com.fsaint.androidagent.capabilities.notifications.AgentNotificationListenerServiceDependencies
 import com.fsaint.androidagent.capabilities.notifications.NotificationEventSink
+import com.fsaint.androidagent.capabilities.radios.AndroidRadioAdapter
+import com.fsaint.androidagent.capabilities.radios.RadioCapability
 import com.fsaint.androidagent.capabilities.sms.SmsCapability
 import com.fsaint.androidagent.capabilities.sms.SmsBroadcastReceiverDependencies
 import com.fsaint.androidagent.capabilities.sms.SmsEventSink
@@ -77,6 +79,7 @@ class DarkLordApplication : Application() {
     private val cameraCapability by lazy { CameraCapability(AndroidCameraAdapter(this)) }
     private val microphoneCapability by lazy { MicrophoneCapability(AndroidMicrophoneAdapter(this)) }
     private val audioCapability by lazy { AudioCapability(AndroidAudioAdapter(this)) }
+    private val radioCapability by lazy { RadioCapability(AndroidRadioAdapter(this)) }
     private val screenCaptureAdapter by lazy { AndroidScreenCaptureAdapter(this) }
     private val screenCapability by lazy { ScreenCapability(screenCaptureAdapter) }
     private val scopes = ScopeRegistry()
@@ -108,7 +111,8 @@ class DarkLordApplication : Application() {
                     screenCapability.toolHandlers() +
                     cameraCapability.toolHandlers() +
                     microphoneCapability.toolHandlers() +
-                    audioCapability.toolHandlers(),
+                    audioCapability.toolHandlers() +
+                    radioCapability.toolHandlers(),
                 scopes,
             ),
             verification = VerificationEngine(),
