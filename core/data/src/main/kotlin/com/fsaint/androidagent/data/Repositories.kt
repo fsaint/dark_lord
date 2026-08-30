@@ -70,6 +70,8 @@ class DurableStateRepository(private val dao: DurableStateDao) {
     suspend fun save(value: ScheduleEntity) = dao.putSchedule(value)
     suspend fun save(value: CapabilityStatusEntity) = dao.putCapabilityStatus(value)
     suspend fun save(value: McpConfigurationEntity) = dao.putMcpConfiguration(value)
+    suspend fun mcpConfigurations(): List<McpConfigurationEntity> = dao.mcpConfigurations()
+    suspend fun deleteMcpConfiguration(id: String): Boolean = dao.deleteMcpConfiguration(id) > 0
     suspend fun save(value: OAuthMetadataEntity) = dao.putOAuthMetadata(value)
     suspend fun save(value: SkillEntity) = dao.putSkill(value)
     suspend fun save(value: SkillVersionEntity) = dao.putSkillVersion(value)

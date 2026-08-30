@@ -38,6 +38,18 @@ Send an SMS to the device, or invoke Dark Lord with the Side button, and ask a s
 
 To test voice, start voice capture, speak the same request, and confirm the response is spoken aloud. If no key is configured, Dark Lord returns a setup message instead of crashing.
 
+## Add an MCP server
+
+1. Open **MCP server settings** from the main screen.
+2. Enter a display name and an HTTPS Streamable HTTP endpoint, such as `https://mcp.example.com/mcp`.
+3. If the server uses OAuth, enter its token endpoint and client ID. Never enter refresh tokens in ordinary fields or messages; those belong in the protected OAuth flow.
+4. Tap **Save MCP server**. The configuration is stored in the encrypted Room database.
+5. Grant the connection to the intended principal/scope before allowing model tool calls. Unknown principals do not receive configured MCP access.
+
+The screen lists saved connections and lets the owner remove them. Real endpoint connectivity, OAuth enrollment, and Tailscale client enrollment remain deployment-specific device checks; use the [Stage 8 checklist](device-test/stage-8-mcp-skills.md) when validating those paths.
+
+Dark Lord's inbound MCP server is currently a scoped protocol foundation (`TailscaleMcpServer`) rather than an always-on public endpoint. A live Tailscale listener and endpoint advertisement are still required before another MCP client can connect to the phone.
+
 Use the [Stage 11 conversational harness checklist](device-test/stage-11-conversational-harness.md) for the complete smoke test. The [acceptance checklist](acceptance/flip3-prototype-checklist.md) tracks the broader device evidence still required.
 
 ## Useful verification commands

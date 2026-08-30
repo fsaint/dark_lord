@@ -26,6 +26,8 @@ import com.fsaint.androidagent.ui.CommunicationsAccessStatus
 import com.fsaint.androidagent.ui.OpenAssistantScreen
 import com.fsaint.androidagent.ui.PrincipalSettingsScreen
 import com.fsaint.androidagent.ui.DebugScreen
+import com.fsaint.androidagent.ui.McpSettingsScreen
+import com.fsaint.androidagent.data.McpConfigurationEntity
 
 class MainActivity : ComponentActivity() {
     private val requestAssistantRole = registerForActivityResult(
@@ -56,7 +58,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             var principalSettingsOpen by rememberSaveable { mutableStateOf(false) }
             var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
-            if (diagnosticsOpen) {
+            var mcpSettingsOpen by rememberSaveable { mutableStateOf(false) }
+            if (mcpSettingsOpen) {
+                McpSettingsRoute(application as DarkLordApplication) { mcpSettingsOpen = false }
+            } else if (diagnosticsOpen) {
                 DebugScreen((application as DarkLordApplication).diagnostics) { diagnosticsOpen = false }
             } else if (principalSettingsOpen) {
                 PrincipalSettingsRoute(
@@ -74,6 +79,7 @@ class MainActivity : ComponentActivity() {
                     onRequestScreenCapture = ::requestScreenCapture,
                     onOpenPrincipalSettings = { principalSettingsOpen = true },
                     onOpenDiagnostics = { diagnosticsOpen = true },
+                    onOpenMcpSettings = { mcpSettingsOpen = true },
                     onSaveOpenAiKey = { value -> lifecycleScope.launch { (application as DarkLordApplication).saveOpenAiApiKey(value) } },
                 )
             }
@@ -165,6 +171,18 @@ private fun PrincipalSettingsRoute(
         onRequestRoles = onRequestRoles,
         onRequestPermissions = onRequestPermissions,
         onOpenNotificationListenerSettings = onOpenNotificationListenerSettings,
+        onBack = onBack,
+    )
+}
+
+@Composable
+private fun McpSettingsRoute(application: DarkLordApplication, onBack: () -> Unit) {
+    var configurations by remember { mutableStateOf<List<McpConfigurationEntity>>(emptyList()) }
+    LaunchedEffect(Unit) { configurations = application.mcpConfigurations() }
+    McpSettingsScreen(
+        configurations = configurations,
+        onAdd = { draft -> application.addMcpServer(draft).also { if (it.isSuccess) configurations = application.mcpConfigurations() } },
+        onDelete = { id -> application.removeMcpServer(id); configurations = application.mcpConfigurations() },
         onBack = onBack,
     )
 }

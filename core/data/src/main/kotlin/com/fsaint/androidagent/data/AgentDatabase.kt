@@ -72,6 +72,8 @@ import com.fsaint.androidagent.model.VerificationState
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSchedule(value: ScheduleEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putCapabilityStatus(value: CapabilityStatusEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putMcpConfiguration(value: McpConfigurationEntity)
+    @Query("SELECT * FROM mcp_configurations ORDER BY name") suspend fun mcpConfigurations(): List<McpConfigurationEntity>
+    @Query("DELETE FROM mcp_configurations WHERE id = :id") suspend fun deleteMcpConfiguration(id: String): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putOAuthMetadata(value: OAuthMetadataEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSkill(value: SkillEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSkillVersion(value: SkillVersionEntity)

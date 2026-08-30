@@ -25,6 +25,7 @@ The conversational harness and Stage 11 integration are implemented. The full Gr
 - OpenAI Responses API conversational harness with model-selected tools, an eight-turn safety budget, one final SMS/voice response, and resumable Room-backed checkpoints.
 - Owner-only OpenAI API-key setup stored in Android Keystore; credentials are excluded from diagnostics, messages, and audit output.
 - MCP connection foundations with scoped discovery, OAuth metadata, Streamable HTTP seams, private Tailscale server support, and network failure handling.
+- Owner-facing MCP server settings for saving and removing HTTPS endpoints with optional OAuth configuration.
 - Declarative skill manifests, validation, installation lifecycle, versioning, rollback, and scoped skill access.
 - Release signing, APK checksums, sideloading instructions, automated JVM/app tests, lint, and connected-device acceptance tests.
 

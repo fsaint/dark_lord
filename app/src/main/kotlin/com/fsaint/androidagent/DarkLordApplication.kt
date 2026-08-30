@@ -47,6 +47,7 @@ import com.fsaint.androidagent.data.EventRepository
 import com.fsaint.androidagent.data.PrincipalRepository
 import com.fsaint.androidagent.data.DurableStateRepository
 import com.fsaint.androidagent.data.RoomConversationCheckpointStore
+import com.fsaint.androidagent.data.McpConfigurationEntity
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
@@ -114,6 +115,7 @@ class DarkLordApplication : Application() {
     private val screenCaptureAdapter by lazy { AndroidScreenCaptureAdapter(this) }
     private val screenCapability by lazy { ScreenCapability(screenCaptureAdapter) }
     private val scopes = ScopeRegistry()
+    private val durableState by lazy { DurableStateRepository(database.durableStateDao()) }
     private val agentTools by lazy {
         ScopedToolRouter(
             deviceCapability.toolHandlers() +
@@ -226,6 +228,15 @@ class DarkLordApplication : Application() {
         val owner = principals.owner() ?: return CredentialOutcome.DENIED
         return openAiCredentials.set(owner, value)
     }
+
+    suspend fun mcpConfigurations(): List<McpConfigurationEntity> = durableState.mcpConfigurations()
+    suspend fun addMcpServer(draft: com.fsaint.androidagent.ui.McpServerDraft): Result<Unit> = runCatching {
+        require(draft.name.isNotBlank()) { "Enter a display name." }
+        require(draft.endpoint.startsWith("https://")) { "MCP endpoints must use HTTPS." }
+        require(draft.endpoint.length <= 512) { "Endpoint is too long." }
+        durableState.save(McpConfigurationEntity(java.util.UUID.randomUUID().toString(), draft.name.take(80), com.fsaint.androidagent.ui.encodeMcpDraft(draft)))
+    }
+    suspend fun removeMcpServer(id: String) { durableState.deleteMcpConfiguration(id) }
 
     fun acceptScreenCaptureGrant(resultCode: Int, data: Intent?) {
         screenCaptureAdapter.acceptGrant(resultCode, data)
