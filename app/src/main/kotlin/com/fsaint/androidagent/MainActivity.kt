@@ -9,10 +9,17 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import com.fsaint.androidagent.policy.Principal
+import com.fsaint.androidagent.ui.CommunicationsAccessStatus
 import com.fsaint.androidagent.ui.OpenAssistantScreen
 import com.fsaint.androidagent.ui.PrincipalSettingsScreen
 
@@ -38,8 +45,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             var principalSettingsOpen by rememberSaveable { mutableStateOf(false) }
             if (principalSettingsOpen) {
-                PrincipalSettingsScreen(
-                    principals = (application as DarkLordApplication).principals,
+                PrincipalSettingsRoute(
+                    application = application as DarkLordApplication,
                     accessStatus = ::communicationsAccessStatus,
                     onRequestRoles = ::requestCommunicationsRoles,
                     onRequestPermissions = ::requestCapabilityPermissions,
@@ -101,4 +108,42 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun communicationsAccessStatus() = (application as DarkLordApplication).communicationsAccessStatus()
+}
+
+@Composable
+private fun PrincipalSettingsRoute(
+    application: DarkLordApplication,
+    accessStatus: () -> CommunicationsAccessStatus,
+    onRequestRoles: () -> Unit,
+    onRequestPermissions: () -> Unit,
+    onOpenNotificationListenerSettings: () -> Unit,
+    onBack: () -> Unit,
+) {
+    var owner by remember { mutableStateOf<Principal?>(null) }
+    var ownerLoaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        owner = application.principals.owner()
+        ownerLoaded = true
+    }
+
+    if (!ownerLoaded) {
+        MaterialTheme { Text("Loading communications administration…") }
+        return
+    }
+
+    PrincipalSettingsScreen(
+        principals = application.principals,
+        owner = owner,
+        onProvisionOwner = { e164 ->
+            application.ownerProvisioning.provision(e164).also { result ->
+                result.onSuccess { owner = it }
+            }
+        },
+        accessStatus = accessStatus,
+        onRequestRoles = onRequestRoles,
+        onRequestPermissions = onRequestPermissions,
+        onOpenNotificationListenerSettings = onOpenNotificationListenerSettings,
+        onBack = onBack,
+    )
 }

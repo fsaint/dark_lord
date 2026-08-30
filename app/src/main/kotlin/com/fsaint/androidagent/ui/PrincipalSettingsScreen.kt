@@ -1,5 +1,6 @@
 package com.fsaint.androidagent.ui
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -22,6 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.fsaint.androidagent.model.PrincipalRole
 import com.fsaint.androidagent.policy.Principal
@@ -39,6 +45,8 @@ data class CommunicationsAccessStatus(
 @Composable
 fun PrincipalSettingsScreen(
     principals: PrincipalDirectory,
+    owner: Principal?,
+    onProvisionOwner: suspend (String) -> Result<Principal>,
     accessStatus: () -> CommunicationsAccessStatus,
     onRequestRoles: () -> Unit,
     onRequestPermissions: () -> Unit,
@@ -51,6 +59,12 @@ fun PrincipalSettingsScreen(
     var phoneNumber by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var status by remember { mutableStateOf(accessStatus()) }
+    var currentOwner by remember(owner) { mutableStateOf(owner) }
+    var ownerPhoneNumber by remember { mutableStateOf("") }
+    var ownerConfirmed by remember { mutableStateOf(false) }
+    var ownerProvisioning by remember { mutableStateOf(false) }
+    var ownerError by remember { mutableStateOf<String?>(null) }
+    var ownerSuccess by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(reload) {
         directory = principals.list()
@@ -62,6 +76,7 @@ fun PrincipalSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -92,6 +107,87 @@ fun PrincipalSettingsScreen(
                 onClick = { reload++ },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Refresh access status") }
+
+            if (currentOwner == null) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("Set up first owner", style = MaterialTheme.typography.titleMedium)
+                        Text("This one-time action makes this number the sole owner. The owner cannot be replaced here later.")
+                        OutlinedTextField(
+                            value = ownerPhoneNumber,
+                            onValueChange = {
+                                ownerPhoneNumber = it
+                                ownerError = null
+                            },
+                            label = { Text("Owner E.164 number") },
+                            supportingText = { Text("Include + and country code, such as +14155550100") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !ownerProvisioning,
+                            singleLine = true,
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { role = Role.Checkbox }
+                                .toggleable(
+                                    value = ownerConfirmed,
+                                    enabled = !ownerProvisioning,
+                                    role = Role.Checkbox,
+                                    onValueChange = {
+                                        ownerConfirmed = it
+                                        ownerError = null
+                                    },
+                                ),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Checkbox(
+                                checked = ownerConfirmed,
+                                onCheckedChange = null,
+                                enabled = !ownerProvisioning,
+                            )
+                            Text("I confirm this is my phone number", modifier = Modifier.padding(top = 12.dp))
+                        }
+                        Button(
+                            onClick = {
+                                val e164 = ownerPhoneNumber.trim()
+                                if (!E164.matches(e164)) {
+                                    ownerError = "Enter a valid E.164 number."
+                                    return@Button
+                                }
+                                ownerProvisioning = true
+                                ownerError = null
+                                scope.launch {
+                                    onProvisionOwner(e164)
+                                        .onSuccess { provisionedOwner ->
+                                            currentOwner = provisionedOwner
+                                            ownerPhoneNumber = ""
+                                            ownerConfirmed = false
+                                            ownerSuccess = "Owner provisioned successfully."
+                                            reload++
+                                        }
+                                        .onFailure { failure ->
+                                            ownerError = failure.message ?: "Owner provisioning failed."
+                                        }
+                                    ownerProvisioning = false
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = ownerConfirmed && !ownerProvisioning,
+                        ) { Text(if (ownerProvisioning) "Provisioning owner…" else "Provision owner") }
+                        ownerError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                    }
+                }
+            } else {
+                Text(
+                    "Owner: ${currentOwner?.e164 ?: currentOwner?.id}",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                ownerSuccess?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+            }
 
             Text("Known principals", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
             OutlinedTextField(
@@ -126,19 +222,17 @@ fun PrincipalSettingsScreen(
             }, modifier = Modifier.fillMaxWidth()) { Text("Add known principal") }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(directory, key = { it.id }) { principal ->
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("${principal.role}: ${principal.e164 ?: principal.id}")
-                        if (principal.role == PrincipalRole.KNOWN && principal.e164 != null) {
-                            val e164 = principal.e164 ?: return@items
-                            Button(onClick = {
-                                scope.launch {
-                                    principals.removeKnown(e164)
-                                    reload++
-                                }
-                            }) { Text("Remove") }
-                        }
+            directory.forEach { principal ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("${principal.role}: ${principal.e164 ?: principal.id}")
+                    val e164 = principal.e164
+                    if (principal.role == PrincipalRole.KNOWN && e164 != null) {
+                        Button(onClick = {
+                            scope.launch {
+                                principals.removeKnown(e164)
+                                reload++
+                            }
+                        }) { Text("Remove") }
                     }
                 }
             }
