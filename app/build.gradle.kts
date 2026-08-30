@@ -45,6 +45,7 @@ dependencies {
     implementation(project(":core:skills"))
     implementation(project(":capabilities:device"))
     implementation(project(":capabilities:sms"))
+    implementation(project(":capabilities:telephony"))
     implementation(project(":oem:samsung-flip3"))
 
     implementation(libs.androidx.activity.compose)

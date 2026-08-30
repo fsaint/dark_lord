@@ -26,5 +26,6 @@ include(
     ":test-support",
     ":capabilities:device",
     ":capabilities:sms",
+    ":capabilities:telephony",
     ":oem:samsung-flip3",
 )
