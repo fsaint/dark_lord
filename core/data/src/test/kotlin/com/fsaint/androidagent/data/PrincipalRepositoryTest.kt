@@ -8,6 +8,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 @RunWith(RobolectricTestRunner::class)
 class PrincipalRepositoryTest {
@@ -30,6 +31,22 @@ class PrincipalRepositoryTest {
             assertEquals(principal, reopened.lookup("+14155550100"))
         } finally {
             reopenedDatabase.close()
+        }
+    }
+
+    @Test
+    fun ownerAndKnownPrincipalCannotShareAnE164Number() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val database = AgentDatabaseTestFactory.inMemory(context)
+        try {
+            val repository = PrincipalRepository(database.durableStateDao())
+            repository.upsert(Principal("owner", "+14155550100", PrincipalRole.OWNER))
+
+            assertFailsWith<IllegalArgumentException> {
+                repository.upsert(Principal("known:+14155550100", "+14155550100", PrincipalRole.KNOWN))
+            }
+        } finally {
+            database.close()
         }
     }
 }

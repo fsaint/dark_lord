@@ -29,6 +29,9 @@ class OwnerSmsCommandHandler(
 
         ADD.matchEntire(command)?.let { match ->
             val e164 = match.groupValues[1]
+            if (principals.owner()?.e164 == e164) {
+                return ToolResult(false, error = ToolError.NOT_FOUND)
+            }
             principals.upsert(Principal("known:$e164", e164, PrincipalRole.KNOWN))
             return ToolResult(true, "Added $e164 as a known principal.", verification = VerificationState.VERIFIED)
         }

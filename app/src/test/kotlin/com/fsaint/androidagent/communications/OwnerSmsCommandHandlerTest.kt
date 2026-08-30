@@ -50,13 +50,24 @@ class OwnerSmsCommandHandlerTest {
 
         assertEquals(ToolError.SCOPE_DENIED, result.error)
     }
+
+    @Test
+    fun ownerCannotBeAddedAsKnownPrincipal() = runTest {
+        directory.ownerPrincipal = owner
+
+        val result = handler.handle(owner, "KNOWN ADD +14155550100")
+
+        assertFalse(result.success)
+        assertTrue(directory.saved.isEmpty())
+    }
 }
 
 private class RecordingPrincipalDirectory : PrincipalDirectory {
     val saved = mutableListOf<Principal>()
     val removed = mutableListOf<String>()
+    var ownerPrincipal: Principal? = null
 
-    override suspend fun owner(): Principal? = null
+    override suspend fun owner(): Principal? = ownerPrincipal
     override suspend fun lookup(e164: String): Principal? = null
     override suspend fun list(): List<Principal> = saved
     override suspend fun upsert(principal: Principal) {

@@ -31,6 +31,7 @@ data class CommunicationsAccessStatus(
     val smsRoleHeld: Boolean,
     val dialerRoleHeld: Boolean,
     val notificationListenerEnabled: Boolean,
+    val postNotificationsPermissionGranted: Boolean,
     val capabilityPermissionsGranted: Boolean,
 )
 
@@ -64,6 +65,7 @@ fun PrincipalSettingsScreen(
             Text("SMS default app: ${status.smsRoleHeld.asAccessLabel()}")
             Text("Dialer default app: ${status.dialerRoleHeld.asAccessLabel()}")
             Text("Notification access: ${status.notificationListenerEnabled.asAccessLabel()}")
+            Text("Notification permission: ${status.postNotificationsPermissionGranted.asAccessLabel()}")
             Text("SMS and call permissions: ${status.capabilityPermissionsGranted.asAccessLabel()}")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onRequestRoles) { Text("Request SMS and dialer roles") }
@@ -88,10 +90,19 @@ fun PrincipalSettingsScreen(
                     return@Button
                 }
                 scope.launch {
-                    principals.upsert(Principal("known:$e164", e164, PrincipalRole.KNOWN))
-                    phoneNumber = ""
-                    error = null
-                    reload++
+                    if (principals.owner()?.e164 == e164) {
+                        error = "The owner number cannot also be known."
+                        return@launch
+                    }
+                    runCatching {
+                        principals.upsert(Principal("known:$e164", e164, PrincipalRole.KNOWN))
+                    }.onFailure {
+                        error = "That number is already assigned to a principal."
+                    }.onSuccess {
+                        phoneNumber = ""
+                        error = null
+                        reload++
+                    }
                 }
             }) { Text("Add known principal") }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

@@ -15,8 +15,12 @@ class CommunicationsDispatcher(
     private val registry: PrincipalRegistry = PrincipalRegistry(),
 ) {
     suspend fun dispatch(event: AgentEvent, channel: String) {
-        val principal = principals.lookup(event.source)
-            ?: registry.normalize(event.source).let { e164 -> Principal("unknown:$e164", e164, PrincipalRole.UNKNOWN) }
+        val principal = when (channel) {
+            "SMS", "CALL" -> principals.lookup(event.source)
+                ?: registry.normalize(event.source).let { e164 -> Principal("unknown:$e164", e164, PrincipalRole.UNKNOWN) }
+            "NOTIFICATION" -> Principal("notification:${event.source}", null, PrincipalRole.UNKNOWN)
+            else -> Principal("unknown:${event.source}", null, PrincipalRole.UNKNOWN)
+        }
         runtime.process(scopes.sessionFor(principal, channel), event)
     }
 }

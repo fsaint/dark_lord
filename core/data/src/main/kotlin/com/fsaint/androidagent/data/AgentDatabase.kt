@@ -19,7 +19,7 @@ import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.DeliveryState
 import com.fsaint.androidagent.model.VerificationState
 
-@Entity(tableName = "principals", indices = [Index(value = ["e164"])]) data class PrincipalEntity(@PrimaryKey val id: String, val e164: String, val role: String, val displayName: String?, val content: ByteArray?)
+@Entity(tableName = "principals", indices = [Index(value = ["e164"], unique = true)]) data class PrincipalEntity(@PrimaryKey val id: String, val e164: String, val role: String, val displayName: String?, val content: ByteArray?)
 @Entity(tableName = "scope_grants") data class ScopeGrantEntity(@PrimaryKey val id: String, val principalId: String, val resourceType: String, val resourceId: String, val granted: Boolean)
 @Entity(tableName = "sessions") data class SessionEntity(@PrimaryKey val id: String, val principalId: String, val scopeId: String, val channel: String, val memoryNamespace: String, val createdAtEpochMs: Long)
 @Entity(tableName = "events") data class EventEntity(@PrimaryKey val id: String, val type: String, val source: String, val occurredAtEpochMs: Long, val payload: ByteArray, val deliveryState: String)
@@ -72,7 +72,7 @@ import com.fsaint.androidagent.model.VerificationState
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putVerificationOutcome(value: VerificationOutcomeEntity)
 }
 
-@Database(entities = [PrincipalEntity::class, ScopeGrantEntity::class, SessionEntity::class, EventEntity::class, ConversationMessageEntity::class, MemoryEntryEntity::class, ScheduleEntity::class, CapabilityStatusEntity::class, McpConfigurationEntity::class, OAuthMetadataEntity::class, SkillEntity::class, SkillVersionEntity::class, SkillUpdateAttemptEntity::class, EscalationEntity::class, ToolExecutionEntity::class, VerificationOutcomeEntity::class, AuditRecordEntity::class], version = 2, exportSchema = true)
+@Database(entities = [PrincipalEntity::class, ScopeGrantEntity::class, SessionEntity::class, EventEntity::class, ConversationMessageEntity::class, MemoryEntryEntity::class, ScheduleEntity::class, CapabilityStatusEntity::class, McpConfigurationEntity::class, OAuthMetadataEntity::class, SkillEntity::class, SkillVersionEntity::class, SkillUpdateAttemptEntity::class, EscalationEntity::class, ToolExecutionEntity::class, VerificationOutcomeEntity::class, AuditRecordEntity::class], version = 3, exportSchema = true)
 abstract class AgentDatabase : RoomDatabase() {
     abstract fun eventDao(): EventDao
     abstract fun auditRecordDao(): AuditRecordDao
@@ -84,12 +84,21 @@ abstract class AgentDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_principals_e164 ON principals (e164)")
             }
         }
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DELETE FROM principals WHERE role = 'OWNER' AND rowid NOT IN (SELECT MIN(rowid) FROM principals WHERE role = 'OWNER' GROUP BY e164)")
+                db.execSQL("DELETE FROM principals WHERE role = 'KNOWN' AND rowid NOT IN (SELECT MIN(rowid) FROM principals WHERE role = 'KNOWN' GROUP BY e164)")
+                db.execSQL("DELETE FROM principals WHERE role = 'KNOWN' AND e164 IN (SELECT e164 FROM principals WHERE role = 'OWNER')")
+                db.execSQL("DROP INDEX IF EXISTS index_principals_e164")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_principals_e164 ON principals (e164)")
+            }
+        }
     }
 }
 
 object AgentDatabaseTestFactory {
     fun open(context: Context, name: String): AgentDatabase = Room.databaseBuilder(context, AgentDatabase::class.java, name)
-        .addMigrations(AgentDatabase.MIGRATION_1_2)
+        .addMigrations(AgentDatabase.MIGRATION_1_2, AgentDatabase.MIGRATION_2_3)
         .allowMainThreadQueries()
         .build()
     fun inMemory(context: Context): AgentDatabase = Room.inMemoryDatabaseBuilder(context, AgentDatabase::class.java).allowMainThreadQueries().build()

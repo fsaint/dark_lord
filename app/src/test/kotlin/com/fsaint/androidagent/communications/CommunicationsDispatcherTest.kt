@@ -67,6 +67,28 @@ class CommunicationsDispatcherTest {
         )
         assertEquals(planner.sessions[0], planner.sessions[1])
     }
+
+    @Test
+    fun notificationSourceUsesStablePackagePrincipalWithoutPhoneNormalization() = runTest {
+        val planner = RecordingPlanner()
+        val scopes = ScopeRegistry()
+        val dispatcher = CommunicationsDispatcher(EmptyPrincipalDirectory, scopes, runtimeFor(planner, scopes))
+
+        dispatcher.dispatch(AgentEvent("notification", "notification.posted", "com.example.mail", 1), "NOTIFICATION")
+
+        assertEquals("notification:com.example.mail", planner.session?.principalId)
+        assertEquals(PrincipalRole.UNKNOWN, planner.session?.role)
+    }
+
+    private fun runtimeFor(planner: RecordingPlanner, scopes: ScopeRegistry) = AgentRuntime(
+        events = NoOpEventStore,
+        audit = NoOpAuditStore,
+        planner = planner,
+        contextBuilder = ScopedContextBuilder(scopes, emptyMap()),
+        tools = ScopedToolRouter(emptyMap(), scopes),
+        verification = VerificationEngine(),
+        replies = NoOpReplySender,
+    )
 }
 
 private object EmptyPrincipalDirectory : PrincipalDirectory {

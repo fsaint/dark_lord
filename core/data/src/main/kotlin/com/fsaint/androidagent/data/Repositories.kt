@@ -95,10 +95,13 @@ class PrincipalRepository(
 
     override suspend fun upsert(principal: Principal) {
         val e164 = requireNotNull(principal.e164) { "Persisted principals require an E.164 number" }
+        val normalized = registry.normalize(e164)
+        val existing = dao.principalByE164(normalized)
+        require(existing == null || existing.id == principal.id) { "A principal already uses $normalized" }
         dao.putPrincipal(
             PrincipalEntity(
                 id = principal.id,
-                e164 = registry.normalize(e164),
+                e164 = normalized,
                 role = principal.role.name,
                 displayName = principal.id,
                 content = null,
