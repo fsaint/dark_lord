@@ -3,6 +3,7 @@ package com.fsaint.androidagent
 import com.fsaint.androidagent.runtime.OpenAiHttpRequest
 import com.fsaint.androidagent.runtime.OpenAiHttpResponse
 import com.fsaint.androidagent.runtime.OpenAiHttpTransport
+import android.util.Log
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +24,9 @@ class UrlConnectionOpenAiTransport : OpenAiHttpTransport {
         try {
             connection.outputStream.use { it.write(request.body.toByteArray()) }
             val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
-            OpenAiHttpResponse(connection.responseCode, stream?.bufferedReader()?.use { it.readText() }.orEmpty())
+            val status = connection.responseCode
+            Log.i("DarkLordOpenAI", "Responses API HTTP status=$status")
+            OpenAiHttpResponse(status, stream?.bufferedReader()?.use { it.readText() }.orEmpty())
         } finally {
             connection.disconnect()
         }
