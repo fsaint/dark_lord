@@ -10,7 +10,7 @@ The primary development device is a Samsung Galaxy Z Flip3 on Android 15. The pr
 
 ## Status
 
-Stage 8 MCP and declarative skill foundations are implemented and verified with JVM tests. Stage 7 device capabilities are implemented and verified on the primary development device, including app inspection, accessibility status/actions, screen capture, camera, microphone/audio, Bluetooth/Wi‑Fi, location, sensors, NFC, USB, contacts, and app-private files. Physical communication, network configuration, and permission prompts remain explicit tester-operated procedures.
+Stage 9 recovery, scheduling, Device Owner wiring, and bounded diagnostics are implemented and verified with automated tests. Stage 8 MCP and declarative skill foundations are implemented and verified with JVM tests. Stage 7 device capabilities are implemented and verified on the primary development device, including app inspection, accessibility status/actions, screen capture, camera, microphone/audio, Bluetooth/Wi‑Fi, location, sensors, NFC, USB, contacts, and app-private files. Physical communication, network configuration, Device Owner provisioning, reboot recovery, and permission prompts remain explicit tester-operated procedures.
 
 ## Documentation
 
@@ -21,6 +21,7 @@ Stage 8 MCP and declarative skill foundations are implemented and verified with 
 - [Stage 6 communications device acceptance checklist](docs/device-test/stage-6-communications.md)
 - [Stage 7 capability device acceptance checklist](docs/device-test/stage-7-capabilities.md)
 - [Stage 8 MCP and skills operations checklist](docs/device-test/stage-8-mcp-skills.md)
+- [Stage 9 recovery and diagnostics device checklist](docs/device-test/stage-9-recovery-diagnostics.md)
 
 ## Intended stack
 
