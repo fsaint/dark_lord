@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or `superpowers:executing-plans` to implement this plan task-by-task.
 
-**Goal:** Implement and verify the Stage 7 UI capability group for app inspection, accessibility, and screen capture.
+**Goal:** Implement and verify the Stage 7 device capability groups, including UI, media, radios, and environment/I/O access.
 
-**Architecture:** Add three Android capability modules implementing the existing `AgentCapability` contract. Framework permissions and user grants remain explicit; core routing only sees typed tools and structured errors.
+**Architecture:** Add Android capability modules implementing the existing `AgentCapability` contract. Framework permissions and user grants remain explicit; core routing only sees typed tools and structured errors.
 
 **Tech Stack:** Kotlin, Android APIs, Jetpack Compose-independent capability modules, MediaProjection, AccessibilityService, PackageManager, coroutines, Android instrumentation.
 
@@ -51,3 +51,7 @@
 - [ ] Run module unit tests and `./gradlew :app:lintDebug`.
 - [ ] Run connected tests on SM-F711U1; record unsupported/permission-required outcomes without bypassing Android.
 - [ ] Update Stage 7 device checklist and push `master`.
+
+### Stage 7 completion record
+
+The UI, media, radio, and environment capability groups are implemented and pushed on `master`. JVM tests, focused lint/compilation, and connected checks have passed on SM-F711U1. See [the device checklist](../../device-test/stage-7-capabilities.md) for manual permission-gated checks.

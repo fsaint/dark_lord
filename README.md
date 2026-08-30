@@ -10,7 +10,7 @@ The primary development device is a Samsung Galaxy Z Flip3 on Android 15. The pr
 
 ## Status
 
-The Stage 6 communications implementation has automated verification on the primary development device. Physical SMS, call, notification, and escalation acceptance remains an explicit tester-operated procedure.
+Stage 7 device capabilities are implemented and verified on the primary development device, including app inspection, accessibility status/actions, screen capture, camera, microphone/audio, Bluetooth/Wi‑Fi, location, sensors, NFC, USB, contacts, and app-private files. Physical communication and permission prompts remain explicit tester-operated procedures.
 
 ## Documentation
 
@@ -19,6 +19,7 @@ The Stage 6 communications implementation has automated verification on the prim
 - [Implementation plan](docs/superpowers/plans/2026-08-29-android-agent-prototype.md)
 - [Galaxy Z Flip3 reset and Device Owner provisioning](docs/device-provisioning/galaxy-z-flip3-reset-and-device-owner.md)
 - [Stage 6 communications device acceptance checklist](docs/device-test/stage-6-communications.md)
+- [Stage 7 capability device acceptance checklist](docs/device-test/stage-7-capabilities.md)
 
 ## Intended stack
 
