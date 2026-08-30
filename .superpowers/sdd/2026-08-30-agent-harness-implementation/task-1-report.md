@@ -15,6 +15,13 @@ Implemented the Android-free harness contract layer.
 - `./gradlew :core:runtime:compileKotlin` — passed.
 - `./gradlew :core:runtime:test` — passed.
 
+## Follow-up review fixes
+
+- `ToolProvider.execute` now accepts only the catalog-issued `ValidatedToolCall`; its constructor is private, so raw model calls cannot bypass catalog/scope validation.
+- Validation and run-result failures use the existing model `ToolError` taxonomy. `CANCELLED` and `FAILED` were added to that normalized enum.
+- `ModelProvider.respond` is abstract. Legacy planning is explicit through `LegacyModelProvider` and `LegacyModelProviderAdapter`; current one-shot runtime users were migrated to the named legacy interface.
+- Added `AgentRunStateCodec` and round-trip tests for the durable state encoding.
+
 ## Concerns
 
-The contract brief does not prescribe concrete field types for source, confirmation, scope, or skill metadata. The implementation uses stable strings/nullable resource IDs and explicit enums where safety behavior is required. The existing `ModelProvider.plan` method remains available for current integrations; future harness code should use `respond`.
+The contract brief does not prescribe concrete field types for source, confirmation, scope, or skill metadata. The implementation uses stable strings/nullable resource IDs and explicit enums where safety behavior is required.

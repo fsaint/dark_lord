@@ -3,6 +3,7 @@ package com.fsaint.androidagent.runtime
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.ScopedAgentSession
 import com.fsaint.androidagent.model.ToolCall
+import com.fsaint.androidagent.model.ToolError
 
 data class AgentRequest(
     val runId: String,
@@ -41,18 +42,18 @@ data class SkillDefinition(
 
 enum class Confirmation { NONE, USER_CONFIRMATION_REQUIRED, OWNER_APPROVAL_REQUIRED }
 
-enum class ToolErrorCode {
-    INVALID_TOOL_ID, INVALID_ARGUMENTS, SCOPE_DENIED, CONFIRMATION_REQUIRED,
-    TIMEOUT, CANCELLED, FAILED, NOT_FOUND,
-}
-
 enum class AgentRunState { FINAL, TOOL_CALL, ESCALATE, CANCELLED, TURN_LIMIT, FAILED }
+
+object AgentRunStateCodec {
+    fun encode(state: AgentRunState): String = state.name
+    fun decode(encoded: String): AgentRunState = AgentRunState.valueOf(encoded)
+}
 
 data class AgentRunResult(
     val runId: String,
     val state: AgentRunState,
     val response: String? = null,
-    val error: ToolErrorCode? = null,
+    val error: ToolError? = null,
 ) { init { require(runId.isNotBlank()) } }
 
 interface AgentHarness {

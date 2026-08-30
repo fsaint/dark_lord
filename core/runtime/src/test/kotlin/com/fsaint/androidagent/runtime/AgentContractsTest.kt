@@ -5,6 +5,7 @@ import com.fsaint.androidagent.model.PrincipalRole
 import com.fsaint.androidagent.model.ScopedAgentSession
 import com.fsaint.androidagent.model.ToolCall
 import com.fsaint.androidagent.model.ToolResult
+import com.fsaint.androidagent.model.ToolError
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -28,14 +29,14 @@ class AgentContractsTest {
     @Test fun `tool catalog rejects calls not present in discovered definitions`() = runBlocking {
         val provider = object : ToolProvider {
             override suspend fun discover(scope: ScopeSnapshot) = listOf(ToolDefinition("known", "", "{}", "test", null, Confirmation.NONE, 1, ""))
-            override suspend fun execute(scope: ScopeSnapshot, call: ToolCall): ToolResult<Any> = ToolResult(true, Unit)
+            override suspend fun execute(scope: ScopeSnapshot, call: ValidatedToolCall): ToolResult<Any> = ToolResult(true, Unit)
         }
-        assertEquals(ToolErrorCode.INVALID_TOOL_ID, ToolCatalog(provider).validate(ScopeSnapshot(session), ToolCall("unknown")).error)
+        assertEquals(ToolError.NOT_FOUND, ToolCatalog(provider).validate(ScopeSnapshot(session), ToolCall("unknown")).error)
     }
 
     @Test fun `terminal states have stable serialization`() {
-        AgentRunState.entries.forEach { assertEquals(it, AgentRunState.valueOf(it.name)) }
-        assertEquals("TURN_LIMIT", AgentRunState.TURN_LIMIT.name)
+        AgentRunState.entries.forEach { assertEquals(it, AgentRunStateCodec.decode(AgentRunStateCodec.encode(it))) }
+        assertEquals("TURN_LIMIT", AgentRunStateCodec.encode(AgentRunState.TURN_LIMIT))
     }
 
     @Test fun `safety budgets are eight turns and four calls`() {

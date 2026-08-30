@@ -7,7 +7,7 @@ import com.fsaint.androidagent.model.PrincipalRole
 import com.fsaint.androidagent.policy.Principal
 
 interface OpenAiResponsesTransport { suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction }
-class OpenAiResponsesProvider(private val transport: OpenAiResponsesTransport) : ModelProvider {
+class OpenAiResponsesProvider(private val transport: OpenAiResponsesTransport) : LegacyModelProvider {
     override suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction = transport.plan(session, event, context)
 }
 

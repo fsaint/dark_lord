@@ -8,14 +8,12 @@ import com.fsaint.androidagent.policy.AgentContext
 
 interface EventStore { suspend fun enqueue(event: AgentEvent); suspend fun markCompleted(eventId: String) }
 interface AuditStore { suspend fun append(record: AuditRecord) }
-interface ModelProvider {
-    /** Legacy one-shot entry point retained for existing runtime integrations. */
-    suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction {
-        throw UnsupportedOperationException("one-shot planning is not implemented")
-    }
-
-    suspend fun respond(request: ModelRequest): ModelResponse {
-        throw UnsupportedOperationException("conversational responses are not implemented")
+interface ModelProvider { suspend fun respond(request: ModelRequest): ModelResponse }
+interface LegacyModelProvider { suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction }
+class LegacyModelProviderAdapter(private val legacy: LegacyModelProvider) : ModelProvider {
+    override suspend fun respond(request: ModelRequest): ModelResponse = when (val action = legacy.plan(request.request.session, request.request.event, AgentContext(request.tools.map { it.id }.toSet(), request.memory))) {
+        is PlannedAction.Tool -> ModelResponse.ToolCalls(listOf(action.call))
+        is PlannedAction.Escalate -> ModelResponse.Escalate(action.escalation.question, action.escalation.reason)
     }
 }
 interface ReplySender { suspend fun send(channel: String, recipient: String, text: String) }

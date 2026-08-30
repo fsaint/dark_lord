@@ -13,7 +13,7 @@ import kotlinx.coroutines.CancellationException
 class AgentRuntime(
     private val events: EventStore,
     private val audit: AuditStore,
-    private val planner: ModelProvider,
+    private val planner: LegacyModelProvider,
     private val contextBuilder: ScopedContextBuilder,
     private val tools: ScopedToolRouter,
     private val verification: VerificationEngine,
