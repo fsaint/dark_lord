@@ -14,29 +14,77 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.TimeoutCancellationException
 import java.security.MessageDigest
 
+/** Result of atomically reserving an idempotency key. */
+sealed interface ExecutionReservation {
+    data object Reserved : ExecutionReservation
+    data class Completed(val result: ToolResult<Any>) : ExecutionReservation
+}
+
 /** Durable boundary used to make completed tool calls safe to resume. */
 interface ExecutionLedger {
-    suspend fun lookup(idempotencyKey: String): ToolResult<Any>?
-    suspend fun record(idempotencyKey: String, result: ToolResult<Any>)
+    /** Reserves a new key, or waits for and returns the existing completion. */
+    suspend fun reserveOrReturnCompleted(idempotencyKey: String): ExecutionReservation
+    suspend fun complete(idempotencyKey: String, result: ToolResult<Any>)
+    /** Releases an unfinished reservation after cancellation or an owner failure. */
+    suspend fun release(idempotencyKey: String)
 }
 
 /** Simple ledger for runtime tests and process-local callers. */
 class InMemoryExecutionLedger : ExecutionLedger {
-    private val mutex = Mutex()
-    private val results = mutableMapOf<String, ToolResult<Any>>()
-
-    override suspend fun lookup(idempotencyKey: String): ToolResult<Any>? = mutex.withLock {
-        results[idempotencyKey]
+    private class Entry {
+        var result: ToolResult<Any>? = null
+        val completed = CompletableDeferred<ToolResult<Any>>()
     }
 
-    override suspend fun record(idempotencyKey: String, result: ToolResult<Any>) {
+    private sealed interface Lookup {
+        data object New : Lookup
+        data class Existing(val completed: CompletableDeferred<ToolResult<Any>>) : Lookup
+        data class Done(val result: ToolResult<Any>) : Lookup
+    }
+
+    private val mutex = Mutex()
+    private val entries = mutableMapOf<String, Entry>()
+
+    override suspend fun reserveOrReturnCompleted(idempotencyKey: String): ExecutionReservation {
+        require(idempotencyKey.isNotBlank())
+        return when (val lookup = mutex.withLock {
+            val entry = entries[idempotencyKey]
+            when {
+                entry == null -> {
+                    entries[idempotencyKey] = Entry()
+                    Lookup.New
+                }
+                entry.result != null -> Lookup.Done(entry.result!!)
+                else -> Lookup.Existing(entry.completed)
+            }
+        }) {
+            Lookup.New -> ExecutionReservation.Reserved
+            is Lookup.Done -> ExecutionReservation.Completed(lookup.result)
+            is Lookup.Existing -> ExecutionReservation.Completed(lookup.completed.await())
+        }
+    }
+
+    override suspend fun complete(idempotencyKey: String, result: ToolResult<Any>) {
         mutex.withLock {
-            results.putIfAbsent(idempotencyKey, result)
+            val entry = entries.getOrPut(idempotencyKey) { Entry() }
+            if (entry.result == null) {
+                entry.result = result
+                entry.completed.complete(result)
+            }
+        }
+    }
+
+    override suspend fun release(idempotencyKey: String) {
+        mutex.withLock {
+            val entry = entries[idempotencyKey]
+            if (entry != null && entry.result == null) {
+                entries.remove(idempotencyKey)
+                entry.completed.completeExceptionally(CancellationException("Execution reservation released"))
+            }
         }
     }
 }
@@ -47,19 +95,23 @@ object ToolIdempotencyKey {
         require(runId.isNotBlank()) { "runId must not be blank" }
         require(turn >= 0) { "turn must not be negative" }
         val arguments = call.arguments.toSortedMap().entries.joinToString("&") { (key, value) ->
-            "${escape(key)}=${escape(value)}"
+            "${lengthPrefix(key)}${lengthPrefix(value)}"
         }
-        val canonical = "$runId\u0000$turn\u0000${call.name}\u0000$arguments"
+        val canonical = buildString {
+            append(lengthPrefix(runId))
+            append(lengthPrefix(turn.toString()))
+            append(lengthPrefix(call.name))
+            append(lengthPrefix(call.arguments.size.toString()))
+            append(arguments)
+        }
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(canonical.toByteArray(Charsets.UTF_8))
             .joinToString("") { byte -> "%02x".format(byte) }
         return "tool-v1:$digest"
     }
 
-    private fun escape(value: String): String = value
-        .replace("%", "%25")
-        .replace("&", "%26")
-        .replace("=", "%3D")
+    private fun lengthPrefix(value: String): String =
+        "${value.toByteArray(Charsets.UTF_8).size}:$value"
 }
 
 data class ExecutionBatchResult(
@@ -82,19 +134,12 @@ data class ExecutableToolCall(
  * Cancellation is deliberately not converted into a successful ToolResult: the
  * caller receives the CancellationException and can persist a recovery checkpoint.
  */
-class ExecutionSupervisor(
+class ExecutionSupervisor private constructor(
     private val executor: suspend (ScopeSnapshot, ValidatedToolCall) -> ToolResult<Any>,
     private val ledger: ExecutionLedger = InMemoryExecutionLedger(),
     private val maxParallelism: Int = AgentHarness.MAX_PARALLEL_TOOL_CALLS,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
-    constructor(
-        provider: ToolProvider,
-        ledger: ExecutionLedger = InMemoryExecutionLedger(),
-        maxParallelism: Int = AgentHarness.MAX_PARALLEL_TOOL_CALLS,
-        dispatcher: CoroutineDispatcher = Dispatchers.Default,
-    ) : this({ _, call -> provider.execute(call) }, ledger, maxParallelism, dispatcher)
-
     constructor(
         catalog: ToolCatalog,
         ledger: ExecutionLedger = InMemoryExecutionLedger(),
@@ -106,8 +151,6 @@ class ExecutionSupervisor(
 
     private val keyedLocks = Mutex()
     private val resourceMutexes = mutableMapOf<String, Mutex>()
-    private val inFlightMutex = Mutex()
-    private val inFlight = mutableMapOf<String, CompletableDeferred<ToolResult<Any>>>()
 
     suspend fun execute(
         scope: ScopeSnapshot,
@@ -126,7 +169,7 @@ class ExecutionSupervisor(
 
         val semaphore = Semaphore(maxParallelism)
         val jobs = calls.mapIndexed { index, item ->
-            async {
+            async(dispatcher) {
                 if (index >= maxParallelism) {
                     ToolResult(false, error = ToolError.DEVICE_BUSY, recoverable = true)
                 } else {
@@ -138,20 +181,16 @@ class ExecutionSupervisor(
         }
 
         // Keep the call order stable for checkpointing and model follow-up.
-        val results = withContext(dispatcher) { jobs.awaitAll() }
+        val results = jobs.awaitAll()
         ExecutionBatchResult(results, cancelled = false, idempotencyKeys = calls.map { it.idempotencyKey })
     }
 
     private suspend fun executeOnce(scope: ScopeSnapshot, item: ExecutableToolCall): ToolResult<Any> {
-        ledger.lookup(item.idempotencyKey)?.let { return it }
-
-        val (deferred, owner) = inFlightMutex.withLock {
-            ledger.lookup(item.idempotencyKey)?.let { return@withLock CompletableDeferred<ToolResult<Any>>().apply { complete(it) } to false }
-            inFlight[item.idempotencyKey]?.let { return@withLock it to false }
-            CompletableDeferred<ToolResult<Any>>().also { inFlight[item.idempotencyKey] = it } to true
+        when (val reservation = ledger.reserveOrReturnCompleted(item.idempotencyKey)) {
+            is ExecutionReservation.Completed -> return reservation.result
+            ExecutionReservation.Reserved -> Unit
         }
-        if (!owner) return deferred.await()
-
+        var completed = false
         return try {
             val definition = item.call.definition
             val result = try {
@@ -170,16 +209,11 @@ class ExecutionSupervisor(
             } catch (_: Throwable) {
                 ToolResult(false, error = ToolError.FAILED, recoverable = true)
             }
-            ledger.record(item.idempotencyKey, result)
-            deferred.complete(result)
+            ledger.complete(item.idempotencyKey, result)
+            completed = true
             result
-        } catch (error: Throwable) {
-            deferred.completeExceptionally(error)
-            throw error
         } finally {
-            inFlightMutex.withLock {
-                if (inFlight[item.idempotencyKey] === deferred) inFlight.remove(item.idempotencyKey)
-            }
+            if (!completed) ledger.release(item.idempotencyKey)
         }
     }
 

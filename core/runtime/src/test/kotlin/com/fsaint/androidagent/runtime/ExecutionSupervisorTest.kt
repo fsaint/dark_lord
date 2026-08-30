@@ -12,7 +12,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.util.Collections
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
@@ -30,9 +33,10 @@ class ExecutionSupervisorTest {
             delay(10)
             ToolResult(true, call.call.name as Any)
         }
-        val calls = validated(provider, (1..5).map { ToolCall("tool-$it") })
+        val catalog = ToolCatalog(provider)
+        val calls = validated(catalog, (1..5).map { ToolCall("tool-$it") })
 
-        val result = ExecutionSupervisor(provider).execute(scope, calls)
+        val result = ExecutionSupervisor(catalog).execute(scope, calls)
 
         assertEquals(5, result.results.size)
         assertEquals(4, started.get())
@@ -54,9 +58,10 @@ class ExecutionSupervisorTest {
             synchronized(lock) { active-- }
             ToolResult(true, call.call.name as Any)
         }
-        val calls = validated(provider, listOf(ToolCall("a"), ToolCall("b")))
+        val catalog = ToolCatalog(provider)
+        val calls = validated(catalog, listOf(ToolCall("a"), ToolCall("b")))
 
-        val result = ExecutionSupervisor(provider).execute(scope, calls)
+        val result = ExecutionSupervisor(catalog).execute(scope, calls)
 
         assertTrue(result.results.all { it.success })
         assertEquals(1, maximum)
@@ -68,9 +73,10 @@ class ExecutionSupervisorTest {
             delay(100)
             ToolResult(true, "late")
         }
-        val call = validated(provider, listOf(ToolCall("slow"))).single()
+        val catalog = ToolCatalog(provider)
+        val call = validated(catalog, listOf(ToolCall("slow"))).single()
 
-        val result = ExecutionSupervisor(provider).execute(scope, listOf(call))
+        val result = ExecutionSupervisor(catalog).execute(scope, listOf(call))
 
         assertEquals(ToolError.TIMEOUT, result.results.single().error)
         assertTrue(result.results.single().recoverable)
@@ -84,9 +90,10 @@ class ExecutionSupervisorTest {
             delay(10_000)
             ToolResult(true, "unexpected")
         }
-        val supervisor = ExecutionSupervisor(provider)
+        val catalog = ToolCatalog(provider)
+        val supervisor = ExecutionSupervisor(catalog)
         val job = async {
-            supervisor.execute(scope, validated(provider, listOf(ToolCall("cancel"))))
+            supervisor.execute(scope, validated(catalog, listOf(ToolCall("cancel"))))
         }
         started.await()
         job.cancel()
@@ -101,9 +108,10 @@ class ExecutionSupervisorTest {
             executions.incrementAndGet()
             ToolResult(true, "once")
         }
-        val call = validated(provider, listOf(ToolCall("once"))).single()
+        val catalog = ToolCatalog(provider)
+        val call = validated(catalog, listOf(ToolCall("once"))).single()
         val key = ToolIdempotencyKey.forCall("run", 1, call.call)
-        val supervisor = ExecutionSupervisor(provider, InMemoryExecutionLedger())
+        val supervisor = ExecutionSupervisor(catalog, InMemoryExecutionLedger())
 
         val first = supervisor.execute(scope, listOf(ExecutableToolCall(call, key)))
         val second = supervisor.execute(scope, listOf(ExecutableToolCall(call, key)))
@@ -123,8 +131,84 @@ class ExecutionSupervisorTest {
         assertNotEquals(first, different)
     }
 
-    private fun validated(provider: ToolProvider, calls: List<ToolCall>): List<ValidatedToolCall> {
+    @Test
+    fun `validated call cannot execute through a different scope`() = runTest {
+        val executions = AtomicInteger(0)
+        val provider = object : ToolProvider {
+            override suspend fun discover(scope: ScopeSnapshot) = listOf(
+                ToolDefinition("scoped", "", "{}", "test", "allowed", Confirmation.NONE, 1_000, "")
+            )
+
+            override suspend fun execute(call: ValidatedToolCall): ToolResult<Any> {
+                executions.incrementAndGet()
+                return ToolResult(true, "unexpected")
+            }
+        }
         val catalog = ToolCatalog(provider)
+        val scopeA = ScopeSnapshot(session, setOf("allowed"), "same-id")
+        val scopeB = ScopeSnapshot(session, setOf("other"), "same-id")
+        val validated = catalog.validate(scopeA, ToolCall("scoped")).validated!!
+
+        val result = ExecutionSupervisor(catalog).execute(scopeB, listOf(validated))
+
+        assertEquals(ToolError.SCOPE_DENIED, result.results.single().error)
+        assertEquals(0, executions.get())
+    }
+
+    @Test
+    fun `two supervisors sharing a ledger execute a key only once`() = runTest {
+        val executions = AtomicInteger(0)
+        val started = CompletableDeferred<Unit>()
+        val provider = fakeProvider {
+            executions.incrementAndGet()
+            started.complete(Unit)
+            delay(100)
+            ToolResult(true, "once")
+        }
+        val ledger = InMemoryExecutionLedger()
+        val catalog = ToolCatalog(provider)
+        val call = validated(catalog, listOf(ToolCall("once"))).single()
+        val item = ExecutableToolCall(call, ToolIdempotencyKey.forCall("shared", 1, call.call))
+        val first = async { ExecutionSupervisor(catalog, ledger).execute(scope, listOf(item)) }
+        started.await()
+        val second = async { ExecutionSupervisor(catalog, ledger).execute(scope, listOf(item)) }
+
+        assertEquals("once", first.await().results.single().payload)
+        assertEquals("once", second.await().results.single().payload)
+        assertEquals(1, executions.get())
+    }
+
+    @Test
+    fun `calls execute on the injected dispatcher`() = runTest {
+        val threadNames = Collections.synchronizedList(mutableListOf<String>())
+        val provider = fakeProvider {
+            threadNames += Thread.currentThread().name
+            ToolResult(true, "ok")
+        }
+        val executor = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "execution-supervisor") }
+        val dispatcher = executor.asCoroutineDispatcher()
+        try {
+            val catalog = ToolCatalog(provider)
+            val call = validated(catalog, listOf(ToolCall("once"))).single()
+            ExecutionSupervisor(catalog, dispatcher = dispatcher).execute(scope, listOf(call))
+            assertTrue(threadNames.isNotEmpty())
+            assertTrue(threadNames.all { it.startsWith("execution-supervisor") })
+        } finally {
+            dispatcher.close()
+        }
+    }
+
+    @Test
+    fun `idempotency encoding separates control characters and field boundaries`() {
+        val first = ToolIdempotencyKey.forCall("ab\u0000", 1, ToolCall("c"))
+        val second = ToolIdempotencyKey.forCall("ab", 1, ToolCall("\u0000c"))
+        val third = ToolIdempotencyKey.forCall("ab", 1, ToolCall("c", mapOf("x" to "\u0000")))
+
+        assertNotEquals(first, second)
+        assertNotEquals(second, third)
+    }
+
+    private fun validated(catalog: ToolCatalog, calls: List<ToolCall>): List<ValidatedToolCall> {
         return calls.map { call ->
             kotlinx.coroutines.runBlocking { catalog.validate(scope, call).validated!! }
         }
