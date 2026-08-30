@@ -37,7 +37,13 @@ class AgentRuntime(
                 )
             }.getOrElse {
                 if (it is CancellationException) throw it
-                replies.send(session.channel, recipient, "I can't reach the conversational model yet. Add an owner API key in Dark Lord settings.")
+                val message = when ((it as? OpenAiProviderException)?.error) {
+                    ToolError.PERMISSION_REQUIRED -> "The owner API key is unavailable or was rejected. Check Dark Lord settings."
+                    ToolError.NETWORK_ERROR -> "The conversational model request failed. Check the phone's internet connection and API access."
+                    ToolError.NOT_FOUND -> "The conversational model returned an unreadable response."
+                    else -> "The conversational model is unavailable right now."
+                }
+                replies.send(session.channel, recipient, message)
                 events.markCompleted(event.id)
                 return
             }
