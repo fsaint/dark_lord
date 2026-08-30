@@ -71,7 +71,7 @@ fun PrincipalSettingsScreen(
         status = accessStatus()
     }
 
-    MaterialTheme {
+    DarkLordTheme {
         Column(
             modifier = Modifier
                 .fillMaxSize()

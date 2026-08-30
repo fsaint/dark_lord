@@ -11,7 +11,7 @@ import androidx.compose.ui.Modifier
 
 @Composable
 fun CoverAssistantScreen(response: String = "Listening…") {
-    MaterialTheme {
+    DarkLordTheme {
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,

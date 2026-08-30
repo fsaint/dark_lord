@@ -18,7 +18,7 @@ import com.fsaint.androidagent.diagnostics.DiagnosticsRepository
 @Composable
 fun DebugScreen(repository: DiagnosticsRepository, onBack: () -> Unit) {
     val snapshot = repository.snapshot()
-    MaterialTheme {
+    DarkLordTheme {
         Column(
             modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
