@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
+import android.util.Log
 import android.telephony.SubscriptionManager
 import com.fsaint.androidagent.model.AgentEvent
 
@@ -33,6 +34,7 @@ class SmsBroadcastReceiver(
         Telephony.Sms.Intents.getMessagesFromIntent(intent).forEachIndexed { index, message ->
             val sender = message?.originatingAddress.orEmpty()
             val source = sender.ifBlank { UNKNOWN_SMS_SOURCE }
+            Log.i("DarkLordSms", "received senderLength=${sender.length} senderSuffix=${sender.takeLast(4)}")
             val timestamp = message?.timestampMillis ?: 0L
             sink.publish(
                 AgentEvent(

@@ -31,6 +31,7 @@ class SmsReplySender internal constructor(
     )
 
     fun send(destination: String, body: String, subscriptionId: Int? = null): ToolResult<String> {
+        android.util.Log.i("DarkLordSms", "reply destinationLength=${destination.length} destinationSuffix=${destination.takeLast(4)}")
         if (destination.isBlank() || destination == "unknown:sms") {
             return ToolResult(
                 success = false,
