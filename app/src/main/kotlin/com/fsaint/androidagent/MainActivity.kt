@@ -22,6 +22,7 @@ import com.fsaint.androidagent.policy.Principal
 import com.fsaint.androidagent.ui.CommunicationsAccessStatus
 import com.fsaint.androidagent.ui.OpenAssistantScreen
 import com.fsaint.androidagent.ui.PrincipalSettingsScreen
+import com.fsaint.androidagent.ui.DebugScreen
 
 class MainActivity : ComponentActivity() {
     private val requestAssistantRole = registerForActivityResult(
@@ -50,7 +51,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             var principalSettingsOpen by rememberSaveable { mutableStateOf(false) }
-            if (principalSettingsOpen) {
+            var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
+            if (diagnosticsOpen) {
+                DebugScreen((application as DarkLordApplication).diagnostics) { diagnosticsOpen = false }
+            } else if (principalSettingsOpen) {
                 PrincipalSettingsRoute(
                     application = application as DarkLordApplication,
                     accessStatus = ::communicationsAccessStatus,
@@ -65,6 +69,7 @@ class MainActivity : ComponentActivity() {
                     onRequestCapabilityPermissions = ::requestCapabilityPermissions,
                     onRequestScreenCapture = ::requestScreenCapture,
                     onOpenPrincipalSettings = { principalSettingsOpen = true },
+                    onOpenDiagnostics = { diagnosticsOpen = true },
                 )
             }
         }

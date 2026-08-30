@@ -18,6 +18,7 @@ fun OpenAssistantScreen(
     onRequestCapabilityPermissions: () -> Unit,
     onRequestScreenCapture: (() -> Unit)? = null,
     onOpenPrincipalSettings: () -> Unit = {},
+    onOpenDiagnostics: () -> Unit = {},
 ) {
     MaterialTheme {
         Column(
@@ -40,6 +41,9 @@ fun OpenAssistantScreen(
             }
             Button(onClick = onOpenPrincipalSettings, modifier = Modifier.padding(top = 8.dp)) {
                 Text("Communications settings")
+            }
+            Button(onClick = onOpenDiagnostics, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Diagnostics")
             }
         }
     }

@@ -38,6 +38,8 @@ import com.fsaint.androidagent.communications.AndroidPhoneNumberNormalizer
 import com.fsaint.androidagent.communications.OwnerSmsCommandHandler
 import com.fsaint.androidagent.communications.OwnerSmsCommandProcessor
 import com.fsaint.androidagent.communications.OwnerProvisioningService
+import com.fsaint.androidagent.diagnostics.DiagnosticsRepository
+import com.fsaint.androidagent.diagnostics.DiagnosticCapability
 import com.fsaint.androidagent.data.AuditRepository
 import com.fsaint.androidagent.data.EncryptedAgentDatabaseFactory
 import com.fsaint.androidagent.data.EscalationRepository
@@ -60,6 +62,9 @@ import com.fsaint.androidagent.runtime.ModelProvider
 import com.fsaint.androidagent.runtime.PlannedAction
 import com.fsaint.androidagent.runtime.VerificationEngine
 import com.fsaint.androidagent.oem.samsungflip3.AgentSurfaceRegistry
+import com.fsaint.androidagent.oem.samsungflip3.AndroidDisplayProvider
+import com.fsaint.androidagent.oem.samsungflip3.DisplayBackedPostureProvider
+import com.fsaint.androidagent.oem.samsungflip3.Flip3FormFactorCapability
 import com.fsaint.androidagent.ui.CoverAssistantScreen
 import com.fsaint.androidagent.ui.CallScreenActivity
 import com.fsaint.androidagent.ui.CommunicationsAccessStatus
@@ -83,6 +88,21 @@ class DarkLordApplication : Application() {
     private val audioCapability by lazy { AudioCapability(AndroidAudioAdapter(this)) }
     private val radioCapability by lazy { RadioCapability(AndroidRadioAdapter(this)) }
     private val environmentCapability by lazy { EnvironmentCapability(AndroidEnvironmentAdapter(this)) }
+    private val flip3Capability by lazy {
+        val displays = AndroidDisplayProvider(this)
+        Flip3FormFactorCapability(displays, DisplayBackedPostureProvider(displays))
+    }
+    val diagnostics: DiagnosticsRepository by lazy {
+        DiagnosticsRepository(
+            capabilities = listOf(
+                DiagnosticCapability(deviceCapability.id, true),
+                DiagnosticCapability(appsCapability.id, true),
+                DiagnosticCapability(environmentCapability.id, environmentCapability.status().available),
+                DiagnosticCapability("${flip3Capability.id}.posture", flip3Capability.refresh().available, flip3Capability.status().details),
+            ),
+            permissions = mapOf("notifications" to (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)),
+        )
+    }
     private val screenCaptureAdapter by lazy { AndroidScreenCaptureAdapter(this) }
     private val screenCapability by lazy { ScreenCapability(screenCaptureAdapter) }
     private val scopes = ScopeRegistry()
