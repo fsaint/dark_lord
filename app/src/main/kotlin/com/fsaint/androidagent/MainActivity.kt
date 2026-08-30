@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
@@ -28,6 +29,7 @@ import com.fsaint.androidagent.ui.PrincipalSettingsScreen
 import com.fsaint.androidagent.ui.DebugScreen
 import com.fsaint.androidagent.ui.McpSettingsScreen
 import com.fsaint.androidagent.data.McpConfigurationEntity
+import com.fsaint.androidagent.runtime.CredentialOutcome
 
 class MainActivity : ComponentActivity() {
     private val requestAssistantRole = registerForActivityResult(
@@ -81,7 +83,17 @@ class MainActivity : ComponentActivity() {
                     onOpenNotificationListenerSettings = ::openNotificationListenerSettings,
                     onOpenDiagnostics = { diagnosticsOpen = true },
                     onOpenMcpSettings = { mcpSettingsOpen = true },
-                    onSaveOpenAiKey = { value -> lifecycleScope.launch { (application as DarkLordApplication).saveOpenAiApiKey(value) } },
+                    onSaveOpenAiKey = { value ->
+                        lifecycleScope.launch {
+                            val outcome = (application as DarkLordApplication).saveOpenAiApiKey(value)
+                            val message = when (outcome) {
+                                CredentialOutcome.SAVED -> "OpenAI API key saved."
+                                CredentialOutcome.DENIED -> "Key rejected. Use an owner account and an sk- key."
+                                CredentialOutcome.FAILED -> "Could not save the API key."
+                            }
+                            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                        }
+                    },
                 )
             }
         }
