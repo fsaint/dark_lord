@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 fun OpenAssistantScreen(
     onRequestAssistantRole: () -> Unit,
     onRequestCapabilityPermissions: () -> Unit,
+    onOpenPrincipalSettings: () -> Unit = {},
 ) {
     MaterialTheme {
         Column(
@@ -30,6 +31,9 @@ fun OpenAssistantScreen(
             }
             Button(onClick = onRequestCapabilityPermissions, modifier = Modifier.padding(top = 8.dp)) {
                 Text("Grant microphone, camera, and SMS")
+            }
+            Button(onClick = onOpenPrincipalSettings, modifier = Modifier.padding(top = 8.dp)) {
+                Text("Communications settings")
             }
         }
     }

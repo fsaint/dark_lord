@@ -9,8 +9,20 @@ fun interface NotificationEventSink {
     fun publish(event: AgentEvent)
 }
 
+/** Process-wide application wiring used when Android creates the manifest service. */
+object AgentNotificationListenerServiceDependencies {
+    @Volatile
+    private var eventSink: NotificationEventSink = NoOpNotificationEventSink
+
+    fun configure(eventSink: NotificationEventSink) {
+        this.eventSink = eventSink
+    }
+
+    internal fun sink(): NotificationEventSink = eventSink
+}
+
 class AgentNotificationListenerService(
-    private val sink: NotificationEventSink = NoOpNotificationEventSink,
+    private val sink: NotificationEventSink = AgentNotificationListenerServiceDependencies.sink(),
 ) : NotificationListenerService() {
     private var connected = false
 

@@ -11,8 +11,20 @@ interface SmsEventSink {
     fun publish(event: AgentEvent)
 }
 
+/** Process-wide application wiring used when Android creates the manifest receiver. */
+object SmsBroadcastReceiverDependencies {
+    @Volatile
+    private var eventSink: SmsEventSink = NoOpSmsEventSink
+
+    fun configure(eventSink: SmsEventSink) {
+        this.eventSink = eventSink
+    }
+
+    internal fun sink(): SmsEventSink = eventSink
+}
+
 class SmsBroadcastReceiver(
-    private val sink: SmsEventSink = NoOpSmsEventSink,
+    private val sink: SmsEventSink = SmsBroadcastReceiverDependencies.sink(),
 ) : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in INBOUND_SMS_ACTIONS) return

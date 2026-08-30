@@ -5,6 +5,9 @@ import com.fsaint.androidagent.model.AgentCapability
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AgentTool
 import com.fsaint.androidagent.model.CapabilityStatus
+import com.fsaint.androidagent.model.ToolCall
+import com.fsaint.androidagent.model.ToolError
+import com.fsaint.androidagent.model.ToolResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 
@@ -31,4 +34,18 @@ class SmsCapability(context: Context) : AgentCapability, SmsEventSink {
     override fun publish(event: AgentEvent) {
         eventFlow.tryEmit(event)
     }
+
+    fun toolHandlers(): Map<String, suspend (ToolCall) -> ToolResult<Any>> = mapOf(
+        "sms.reply" to { call ->
+            val destination = call.arguments["number"]
+            val body = call.arguments["message"]
+            if (destination.isNullOrBlank() || body.isNullOrBlank()) {
+                ToolResult(false, error = ToolError.NOT_FOUND, recoverable = true)
+            } else {
+                replySender.send(destination, body, call.arguments["subscriptionId"]?.toIntOrNull()).let { result ->
+                    ToolResult(result.success, result.payload as Any?, result.error, result.recoverable, result.verification)
+                }
+            }
+        },
+    )
 }

@@ -12,7 +12,6 @@ import android.media.ImageReader
 import android.os.BatteryManager
 import android.os.Handler
 import android.os.HandlerThread
-import android.telephony.SmsManager
 import com.fsaint.androidagent.model.AgentCapability
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AgentTool
@@ -36,7 +35,7 @@ class DeviceCapability(private val context: Context) : AgentCapability {
 
     override suspend fun initialize(): CapabilityStatus = current
     override fun tools(): List<AgentTool> = listOf(
-        DeviceTool("device.battery"), DeviceTool("camera.capture"), DeviceTool("sms.reply"),
+        DeviceTool("device.battery"), DeviceTool("camera.capture"),
     )
     override fun events(): Flow<AgentEvent> = emptyFlow()
     override fun status(): CapabilityStatus = current
@@ -47,16 +46,6 @@ class DeviceCapability(private val context: Context) : AgentCapability {
             .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY),
         verification = VerificationState.VERIFIED,
     )
-
-    @Suppress("DEPRECATION")
-    fun sendOwnerReply(number: String, message: String): ToolResult<Unit> {
-        if (context.checkSelfPermission(Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            return ToolResult(false, error = ToolError.PERMISSION_REQUIRED, recoverable = true)
-        }
-        SmsManager.getDefault().sendTextMessage(number, null, message, null, null)
-        // Platform acceptance does not prove delivery; delivery reports are handled in the SMS stage.
-        return ToolResult(success = true, verification = VerificationState.UNVERIFIED)
-    }
 
     @Suppress("MissingPermission") // Checked at method entry; Camera2 can still throw SecurityException.
     suspend fun captureCamera(): ToolResult<String> {
@@ -161,17 +150,6 @@ class DeviceCapability(private val context: Context) : AgentCapability {
         "camera.capture" to { _ ->
             captureCamera().let { result ->
                 ToolResult(result.success, result.payload as Any?, result.error, result.recoverable, result.verification)
-            }
-        },
-        "sms.reply" to { call ->
-            val number = call.arguments["number"]
-            val message = call.arguments["message"]
-            if (number.isNullOrBlank() || message.isNullOrBlank()) {
-                ToolResult(false, error = ToolError.NOT_FOUND, recoverable = true)
-            } else {
-                sendOwnerReply(number, message).let { result ->
-                    ToolResult(result.success, result.payload as Any?, result.error, result.recoverable, result.verification)
-                }
             }
         },
     )

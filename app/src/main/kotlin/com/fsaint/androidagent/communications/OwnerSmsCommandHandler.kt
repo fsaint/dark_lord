@@ -1,0 +1,53 @@
+package com.fsaint.androidagent.communications
+
+import com.fsaint.androidagent.model.PrincipalRole
+import com.fsaint.androidagent.model.ToolError
+import com.fsaint.androidagent.model.ToolResult
+import com.fsaint.androidagent.model.VerificationState
+import com.fsaint.androidagent.policy.Principal
+import com.fsaint.androidagent.policy.PrincipalDirectory
+
+class OwnerSmsCommandHandler(
+    private val principals: PrincipalDirectory,
+    private val statusProvider: (() -> String)? = null,
+) {
+    suspend fun handle(sender: Principal, body: String): ToolResult<String> {
+        if (sender.role != PrincipalRole.OWNER) {
+            return ToolResult(false, error = ToolError.SCOPE_DENIED)
+        }
+
+        val command = body.trim()
+        if (command.equals(STATUS, ignoreCase = true)) {
+            val knownCount = principals.list().count { it.role == PrincipalRole.KNOWN }
+            val status = statusProvider?.invoke() ?: "Principal administration ready; $knownCount known principal(s)."
+            return ToolResult(
+                success = true,
+                payload = status,
+                verification = VerificationState.VERIFIED,
+            )
+        }
+
+        ADD.matchEntire(command)?.let { match ->
+            val e164 = match.groupValues[1]
+            principals.upsert(Principal("known:$e164", e164, PrincipalRole.KNOWN))
+            return ToolResult(true, "Added $e164 as a known principal.", verification = VerificationState.VERIFIED)
+        }
+
+        REMOVE.matchEntire(command)?.let { match ->
+            val e164 = match.groupValues[1]
+            return if (principals.removeKnown(e164)) {
+                ToolResult(true, "Removed $e164 from known principals.", verification = VerificationState.VERIFIED)
+            } else {
+                ToolResult(false, error = ToolError.NOT_FOUND)
+            }
+        }
+
+        return ToolResult(false, error = ToolError.NOT_FOUND)
+    }
+
+    private companion object {
+        const val STATUS = "STATUS"
+        val ADD = Regex("KNOWN ADD (\\+[1-9]\\d{1,14})", RegexOption.IGNORE_CASE)
+        val REMOVE = Regex("KNOWN REMOVE (\\+[1-9]\\d{1,14})", RegexOption.IGNORE_CASE)
+    }
+}
