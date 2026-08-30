@@ -31,6 +31,13 @@ class SmsReplySender internal constructor(
     )
 
     fun send(destination: String, body: String, subscriptionId: Int? = null): ToolResult<String> {
+        if (destination.isBlank() || destination == "unknown:sms") {
+            return ToolResult(
+                success = false,
+                error = ToolError.UNSUPPORTED,
+                recoverable = false,
+            )
+        }
         if (!access.canSend()) {
             return ToolResult(
                 success = false,
