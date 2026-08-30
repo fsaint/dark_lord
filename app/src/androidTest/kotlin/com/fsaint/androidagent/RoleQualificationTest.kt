@@ -13,6 +13,18 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class RoleQualificationTest {
     @Test
+    fun packageHandlesBareDialIntentRequiredByDialerRole() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+
+        assertFalse(
+            context.packageManager.queryIntentActivities(
+                Intent(Intent.ACTION_DIAL).setPackage(context.packageName),
+                0,
+            ).isEmpty(),
+        )
+    }
+
+    @Test
     fun packageQualifiesForDialerAndSmsRoles() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val roleManager = context.getSystemService(RoleManager::class.java)
