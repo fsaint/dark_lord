@@ -24,6 +24,7 @@ include(
     ":core:mcp",
     ":core:skills",
     ":test-support",
+    ":capabilities:accessibility",
     ":capabilities:apps",
     ":capabilities:device",
     ":capabilities:sms",

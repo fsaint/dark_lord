@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import com.fsaint.androidagent.capabilities.accessibility.AccessibilityCapability
+import com.fsaint.androidagent.capabilities.accessibility.AndroidAccessibilityAdapter
 import com.fsaint.androidagent.capabilities.apps.AppsCapability
 import com.fsaint.androidagent.capabilities.apps.PackageManagerAppsAdapter
 import com.fsaint.androidagent.capabilities.device.DeviceCapability
@@ -62,6 +64,7 @@ class DarkLordApplication : Application() {
     val principals: PrincipalDirectory by lazy { PrincipalRepository(database.durableStateDao()) }
     private val smsCapability by lazy { SmsCapability(this) }
     private val deviceCapability by lazy { DeviceCapability(this) }
+    private val accessibilityCapability by lazy { AccessibilityCapability(AndroidAccessibilityAdapter(this)) }
     private val appsCapability by lazy { AppsCapability(PackageManagerAppsAdapter(this)) }
     private val scopes = ScopeRegistry()
     private val eventStore by lazy { EventRepository(database.eventDao()) }
@@ -85,7 +88,10 @@ class DarkLordApplication : Application() {
             planner = EscalateUntilConfigured,
             contextBuilder = ScopedContextBuilder(scopes, emptyMap()),
             tools = ScopedToolRouter(
-                deviceCapability.toolHandlers() + smsCapability.toolHandlers() + appsCapability.toolHandlers(),
+                deviceCapability.toolHandlers() +
+                    smsCapability.toolHandlers() +
+                    appsCapability.toolHandlers() +
+                    accessibilityCapability.toolHandlers(),
                 scopes,
             ),
             verification = VerificationEngine(),

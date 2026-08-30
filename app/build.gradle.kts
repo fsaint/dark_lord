@@ -44,6 +44,7 @@ dependencies {
     implementation(project(":core:policy"))
     implementation(project(":core:mcp"))
     implementation(project(":core:skills"))
+    implementation(project(":capabilities:accessibility"))
     implementation(project(":capabilities:apps"))
     implementation(project(":capabilities:device"))
     implementation(project(":capabilities:sms"))

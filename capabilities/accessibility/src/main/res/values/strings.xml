@@ -1,0 +1,3 @@
+<resources>
+    <string name="accessibility_service_description">Inspect and operate only explicitly addressed controls after you approve accessibility access.</string>
+</resources>
