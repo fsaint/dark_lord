@@ -35,13 +35,39 @@ class AgentRuntimeTest {
         val replies = InMemoryReplySender()
         val escalations = InMemoryEscalationStore()
         val service = EscalationService(escalations, replies)
-        val escalation = Escalation("esc-1", "alice", "+14155550100", "May I reply?", "approval", "draft")
+        val escalation = Escalation("esc-1", "alice", "SMS", "+14155550100", "May I reply?", "approval", "draft")
 
         service.create(escalation)
         service.resolve("esc-1", OwnerDecision.Approve)
 
         assertEquals("+14155550100", replies.sent.single().recipient)
+        assertEquals("SMS", replies.sent.single().channel)
         assertTrue(escalations.resolved.contains("esc-1"))
+    }
+
+    @Test
+    fun notificationEscalationKeepsNotificationReplyChannel() = runTest {
+        val events = InMemoryEventStore()
+        val replies = InMemoryReplySender()
+        val escalations = InMemoryEscalationStore()
+        val scopes = ScopeRegistry()
+        val session = scopes.sessionFor(Principal("notification:mail", null, PrincipalRole.UNKNOWN), "NOTIFICATION")
+        val proposed = Escalation("esc-notification", session.id, "SMS", "+not-a-phone", "Review?", "approval", "draft")
+        val runtime = AgentRuntime(
+            events,
+            InMemoryAuditStore(),
+            FakeModelProvider(PlannedAction.Escalate(proposed)),
+            ScopedContextBuilder(scopes, emptyMap()),
+            ScopedToolRouter(emptyMap(), scopes),
+            VerificationEngine(),
+            replies,
+            EscalationService(escalations, replies),
+        )
+
+        runtime.process(session, AgentEvent("notification-1", "notification.posted", "com.example.mail", 1))
+
+        assertEquals("NOTIFICATION", replies.sent.single().channel)
+        assertEquals("com.example.mail", replies.sent.single().recipient)
     }
 
     @Test

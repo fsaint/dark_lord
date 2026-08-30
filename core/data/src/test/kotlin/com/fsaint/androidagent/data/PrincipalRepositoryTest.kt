@@ -49,4 +49,17 @@ class PrincipalRepositoryTest {
             database.close()
         }
     }
+
+    @Test
+    fun unnormalizableSourceIsNotRewrittenByAndroidFreeRepository() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val database = AgentDatabaseTestFactory.inMemory(context)
+        try {
+            val principal = PrincipalRepository(database.durableStateDao()).lookup("private-number")
+
+            assertEquals(Principal("unknown:private-number", "private-number", PrincipalRole.UNKNOWN), principal)
+        } finally {
+            database.close()
+        }
+    }
 }

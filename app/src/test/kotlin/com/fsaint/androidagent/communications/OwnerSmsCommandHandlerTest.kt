@@ -4,6 +4,7 @@ import com.fsaint.androidagent.model.PrincipalRole
 import com.fsaint.androidagent.model.ToolError
 import com.fsaint.androidagent.policy.Principal
 import com.fsaint.androidagent.policy.PrincipalDirectory
+import com.fsaint.androidagent.runtime.OwnerDecision
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -59,6 +60,22 @@ class OwnerSmsCommandHandlerTest {
 
         assertFalse(result.success)
         assertTrue(directory.saved.isEmpty())
+    }
+
+    @Test
+    fun ownerCanApprovePersistedEscalationButUnknownSenderCannot() = runTest {
+        val decisions = mutableListOf<Pair<String, OwnerDecision>>()
+        val handler = OwnerSmsCommandHandler(directory, escalationResolver = { id, decision ->
+            decisions += id to decision
+            true
+        })
+
+        val ownerResult = handler.handle(owner, "  approve escalation:sms:42  ")
+        val unknownResult = handler.handle(unknown, "REJECT escalation:sms:42")
+
+        assertTrue(ownerResult.success)
+        assertEquals(listOf("escalation:sms:42" to OwnerDecision.Approve), decisions)
+        assertEquals(ToolError.SCOPE_DENIED, unknownResult.error)
     }
 }
 

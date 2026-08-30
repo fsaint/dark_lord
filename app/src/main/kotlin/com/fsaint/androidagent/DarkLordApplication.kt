@@ -17,6 +17,8 @@ import com.fsaint.androidagent.capabilities.telephony.AgentInCallServiceDependen
 import com.fsaint.androidagent.capabilities.telephony.CallEventSink
 import com.fsaint.androidagent.capabilities.telephony.CallUiLauncher
 import com.fsaint.androidagent.communications.CommunicationsDispatcher
+import com.fsaint.androidagent.communications.CommunicationsReplySender
+import com.fsaint.androidagent.communications.AndroidPhoneNumberNormalizer
 import com.fsaint.androidagent.communications.OwnerSmsCommandHandler
 import com.fsaint.androidagent.communications.OwnerSmsCommandProcessor
 import com.fsaint.androidagent.data.AuditRepository
@@ -31,7 +33,6 @@ import com.fsaint.androidagent.model.PrincipalRole
 import com.fsaint.androidagent.model.VerificationState
 import com.fsaint.androidagent.policy.Principal
 import com.fsaint.androidagent.policy.PrincipalDirectory
-import com.fsaint.androidagent.policy.PrincipalRegistry
 import com.fsaint.androidagent.policy.ScopeRegistry
 import com.fsaint.androidagent.policy.ScopedContextBuilder
 import com.fsaint.androidagent.policy.ScopedToolRouter
@@ -40,7 +41,6 @@ import com.fsaint.androidagent.runtime.Escalation
 import com.fsaint.androidagent.runtime.EscalationService
 import com.fsaint.androidagent.runtime.ModelProvider
 import com.fsaint.androidagent.runtime.PlannedAction
-import com.fsaint.androidagent.runtime.ReplySender
 import com.fsaint.androidagent.runtime.VerificationEngine
 import com.fsaint.androidagent.oem.samsungflip3.AgentSurfaceRegistry
 import com.fsaint.androidagent.ui.CoverAssistantScreen
@@ -62,9 +62,15 @@ class DarkLordApplication : Application() {
     private val scopes = ScopeRegistry()
     private val eventStore by lazy { EventRepository(database.eventDao()) }
     private val auditStore by lazy { AuditRepository(database.auditRecordDao()) }
-    private val replies = object : ReplySender {
-        override suspend fun send(recipient: String, text: String) {
+    private val phoneNumbers by lazy { AndroidPhoneNumberNormalizer(this) }
+    private val replies by lazy {
+        CommunicationsReplySender { recipient, text ->
             smsCapability.replySender.send(recipient, text)
+        }
+    }
+    private val escalationService by lazy {
+        EscalationService(EscalationRepository(database.durableStateDao()), replies) {
+            principals.owner()?.e164
         }
     }
     private val runtime by lazy {
@@ -76,11 +82,11 @@ class DarkLordApplication : Application() {
             tools = ScopedToolRouter(deviceCapability.toolHandlers() + smsCapability.toolHandlers(), scopes),
             verification = VerificationEngine(),
             replies = replies,
-            escalations = EscalationService(EscalationRepository(database.durableStateDao()), replies),
+            escalations = escalationService,
         )
     }
-    private val dispatcher by lazy { CommunicationsDispatcher(principals, scopes, runtime) }
-    private val ownerCommands by lazy { OwnerSmsCommandHandler(principals, ::ownerStatus) }
+    private val dispatcher by lazy { CommunicationsDispatcher(principals, scopes, runtime, phoneNumbers) }
+    private val ownerCommands by lazy { OwnerSmsCommandHandler(principals, ::ownerStatus, escalationService::resolve) }
     private val ownerCommandProcessor by lazy { OwnerSmsCommandProcessor(ownerCommands, eventStore, auditStore, replies) }
 
     override fun onCreate() {
@@ -131,8 +137,9 @@ class DarkLordApplication : Application() {
     private fun dispatch(event: AgentEvent, channel: String) {
         applicationScope.launch {
             if (channel == "SMS" && event.type == "sms.received" && event.payload["body"].isAdministrativeCommand()) {
-                val sender = principals.lookup(event.source)
-                    ?: Principal("unknown:${PrincipalRegistry().normalize(event.source)}", event.source, PrincipalRole.UNKNOWN)
+                val normalizedSource = phoneNumbers.normalize(event.source)
+                val sender = principals.lookup(normalizedSource)
+                    ?: Principal("unknown:$normalizedSource", normalizedSource, PrincipalRole.UNKNOWN)
                 ownerCommandProcessor.process(sender, event)
             } else if (channel == "SMS" && event.type in SMS_TRANSPORT_EVENTS) {
                 recordSmsTransportEvidence(event)
@@ -148,8 +155,9 @@ class DarkLordApplication : Application() {
     }
 
     private suspend fun recordSmsTransportEvidence(event: AgentEvent) {
-        val principal = principals.lookup(event.source)
-            ?: Principal("unknown:${PrincipalRegistry().normalize(event.source)}", event.source, PrincipalRole.UNKNOWN)
+        val normalizedSource = phoneNumbers.normalize(event.source)
+        val principal = principals.lookup(normalizedSource)
+            ?: Principal("unknown:$normalizedSource", normalizedSource, PrincipalRole.UNKNOWN)
         val verification = event.payload["verification"]?.let { name ->
             runCatching { VerificationState.valueOf(name) }.getOrDefault(VerificationState.UNVERIFIED)
         } ?: VerificationState.UNVERIFIED
@@ -185,7 +193,10 @@ class DarkLordApplication : Application() {
 }
 
 private fun String?.isAdministrativeCommand(): Boolean = this?.trim()?.let { command ->
-    command.equals("STATUS", ignoreCase = true) || command.startsWith("KNOWN ", ignoreCase = true)
+    command.equals("STATUS", ignoreCase = true) ||
+        command.startsWith("KNOWN ", ignoreCase = true) ||
+        command.startsWith("APPROVE ", ignoreCase = true) ||
+        command.startsWith("REJECT ", ignoreCase = true)
 } == true
 
 internal fun isNotificationListenerEnabled(packageName: String, enabledListeners: String?): Boolean =
@@ -204,6 +215,7 @@ private object EscalateUntilConfigured : ModelProvider {
         Escalation(
             id = "escalation:${event.id}",
             sessionId = session.id,
+            channel = session.channel,
             recipient = event.source,
             question = "A communications event needs owner review.",
             reason = "No model provider is configured.",

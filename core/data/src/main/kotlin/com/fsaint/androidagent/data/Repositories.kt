@@ -8,7 +8,6 @@ import com.fsaint.androidagent.model.PrincipalRole
 import com.fsaint.androidagent.model.VerificationState
 import com.fsaint.androidagent.policy.Principal
 import com.fsaint.androidagent.policy.PrincipalDirectory
-import com.fsaint.androidagent.policy.PrincipalRegistry
 import com.fsaint.androidagent.runtime.AuditStore
 import com.fsaint.androidagent.runtime.EventStore
 import com.fsaint.androidagent.runtime.Escalation
@@ -81,21 +80,21 @@ class DurableStateRepository(private val dao: DurableStateDao) {
 
 class PrincipalRepository(
     private val dao: DurableStateDao,
-    private val registry: PrincipalRegistry = PrincipalRegistry(),
 ) : PrincipalDirectory {
     override suspend fun owner(): Principal? = dao.owner()?.toPrincipal()
 
     override suspend fun lookup(e164: String): Principal {
-        val normalized = registry.normalize(e164)
-        return dao.principalByE164(normalized)?.toPrincipal()
-            ?: Principal("unknown:$normalized", normalized, PrincipalRole.UNKNOWN)
+        val source = e164.trim()
+        return dao.principalByE164(source)?.toPrincipal()
+            ?: Principal("unknown:$source", source, PrincipalRole.UNKNOWN)
     }
 
     override suspend fun list(): List<Principal> = dao.principals().map { it.toPrincipal() }
 
     override suspend fun upsert(principal: Principal) {
         val e164 = requireNotNull(principal.e164) { "Persisted principals require an E.164 number" }
-        val normalized = registry.normalize(e164)
+        val normalized = e164.trim()
+        require(E164.matches(normalized)) { "Persisted principals require an E.164 number" }
         val existing = dao.principalByE164(normalized)
         require(existing == null || existing.id == principal.id) { "A principal already uses $normalized" }
         dao.putPrincipal(
@@ -109,14 +108,18 @@ class PrincipalRepository(
         )
     }
 
-    override suspend fun removeKnown(e164: String): Boolean = dao.deleteKnown(registry.normalize(e164)) > 0
+    override suspend fun removeKnown(e164: String): Boolean = dao.deleteKnown(e164.trim()) > 0
 
     private fun PrincipalEntity.toPrincipal(): Principal = Principal(id, e164, PrincipalRole.valueOf(role))
+
+    private companion object {
+        val E164 = Regex("\\+[1-9]\\d{1,14}")
+    }
 }
 
 class EscalationRepository(private val dao: DurableStateDao) : EscalationStore {
     override suspend fun save(escalation: Escalation) {
-        dao.putEscalation(EscalationEntity(escalation.id, escalation.sessionId, "OPEN", EventPayloadCodec.encode(mapOf("recipient" to escalation.recipient, "question" to escalation.question, "reason" to escalation.reason, "proposedAction" to escalation.proposedAction))))
+        dao.putEscalation(EscalationEntity(escalation.id, escalation.sessionId, "OPEN", EventPayloadCodec.encode(mapOf("channel" to escalation.channel, "recipient" to escalation.recipient, "question" to escalation.question, "reason" to escalation.reason, "proposedAction" to escalation.proposedAction))))
     }
 
     override suspend fun resolve(id: String, decision: OwnerDecision): Escalation? {
@@ -124,7 +127,8 @@ class EscalationRepository(private val dao: DurableStateDao) : EscalationStore {
         if (entity.status != "OPEN") return null
         dao.updateEscalationStatus(id, decision.name)
         val fields = EventPayloadCodec.decode(entity.payload)
-        return Escalation(entity.id, entity.sessionId, fields.getValue("recipient"), fields.getValue("question"), fields.getValue("reason"), fields.getValue("proposedAction"))
+        val channel = fields["channel"] ?: entity.sessionId.substringAfterLast(':', "SMS")
+        return Escalation(entity.id, entity.sessionId, channel, fields.getValue("recipient"), fields.getValue("question"), fields.getValue("reason"), fields.getValue("proposedAction"))
     }
 }
 

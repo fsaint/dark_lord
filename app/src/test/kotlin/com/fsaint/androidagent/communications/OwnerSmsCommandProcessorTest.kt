@@ -34,7 +34,8 @@ class OwnerSmsCommandProcessorTest {
         assertEquals(listOf("command-1"), events.completed)
         assertEquals(AuthorizationDecision.ALLOW, audit.records.single().authorization)
         assertEquals("owner.command", audit.records.single().tool)
-        assertEquals("+14155550100", replies.replies.single().first)
+        assertEquals("SMS", replies.replies.single().first)
+        assertEquals("+14155550100", replies.replies.single().second)
     }
 }
 
@@ -59,6 +60,6 @@ private class RecordingAudit : AuditStore {
 }
 
 private class RecordingReplies : ReplySender {
-    val replies = mutableListOf<Pair<String, String>>()
-    override suspend fun send(recipient: String, text: String) { replies += recipient to text }
+    val replies = mutableListOf<Triple<String, String, String>>()
+    override suspend fun send(channel: String, recipient: String, text: String) { replies += Triple(channel, recipient, text) }
 }

@@ -24,9 +24,10 @@ class AgentRuntime(
         when (val action = planner.plan(session, event, contextBuilder.build(session))) {
             is PlannedAction.Tool -> processTool(session, event, action)
             is PlannedAction.Escalate -> {
-                escalations?.create(action.escalation)
+                val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
+                escalations?.create(action.escalation.copy(channel = session.channel, recipient = recipient))
                 audit.append(auditRecord(event, session, "owner.ask", AuthorizationDecision.ALLOW, VerificationState.UNVERIFIED, "escalated"))
-                replies.send(event.payload["sender"] ?: session.principalId, "I need owner approval before I can continue.")
+                replies.send(session.channel, recipient, "I need owner approval before I can continue.")
                 events.markCompleted(event.id)
             }
         }
@@ -43,7 +44,8 @@ class AgentRuntime(
             else -> "I couldn't verify that action completed."
         }
         audit.append(auditRecord(event, session, action.call.name, authorization, result.verification, result.error?.name ?: text))
-        replies.send(event.payload["sender"] ?: session.principalId, text)
+        val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
+        replies.send(session.channel, recipient, text)
         events.markCompleted(event.id)
     }
 

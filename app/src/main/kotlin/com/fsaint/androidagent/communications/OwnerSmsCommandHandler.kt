@@ -6,10 +6,12 @@ import com.fsaint.androidagent.model.ToolResult
 import com.fsaint.androidagent.model.VerificationState
 import com.fsaint.androidagent.policy.Principal
 import com.fsaint.androidagent.policy.PrincipalDirectory
+import com.fsaint.androidagent.runtime.OwnerDecision
 
 class OwnerSmsCommandHandler(
     private val principals: PrincipalDirectory,
     private val statusProvider: (() -> String)? = null,
+    private val escalationResolver: suspend (id: String, decision: OwnerDecision) -> Boolean = { _, _ -> false },
 ) {
     suspend fun handle(sender: Principal, body: String): ToolResult<String> {
         if (sender.role != PrincipalRole.OWNER) {
@@ -25,6 +27,20 @@ class OwnerSmsCommandHandler(
                 payload = status,
                 verification = VerificationState.VERIFIED,
             )
+        }
+
+        DECISION.matchEntire(command)?.let { match ->
+            val decision = if (match.groupValues[1].equals("APPROVE", ignoreCase = true)) {
+                OwnerDecision.Approve
+            } else {
+                OwnerDecision.Reject
+            }
+            val escalationId = match.groupValues[2]
+            return if (escalationResolver(escalationId, decision)) {
+                ToolResult(true, "${decision.name}d $escalationId.", verification = VerificationState.VERIFIED)
+            } else {
+                ToolResult(false, error = ToolError.NOT_FOUND)
+            }
         }
 
         ADD.matchEntire(command)?.let { match ->
@@ -52,5 +68,6 @@ class OwnerSmsCommandHandler(
         const val STATUS = "STATUS"
         val ADD = Regex("KNOWN ADD (\\+[1-9]\\d{1,14})", RegexOption.IGNORE_CASE)
         val REMOVE = Regex("KNOWN REMOVE (\\+[1-9]\\d{1,14})", RegexOption.IGNORE_CASE)
+        val DECISION = Regex("(APPROVE|REJECT) (\\S+)", RegexOption.IGNORE_CASE)
     }
 }

@@ -37,7 +37,7 @@ class OwnerSmsCommandProcessor(
             ),
         )
         events.markCompleted(event.id)
-        replies.send(event.source, replyFor(result))
+        replies.send("SMS", event.source, replyFor(result))
         return result
     }
 

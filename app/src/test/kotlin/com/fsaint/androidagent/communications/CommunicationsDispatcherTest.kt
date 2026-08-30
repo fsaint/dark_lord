@@ -34,7 +34,7 @@ class CommunicationsDispatcherTest {
             verification = VerificationEngine(),
             replies = NoOpReplySender,
         )
-        val dispatcher = CommunicationsDispatcher(EmptyPrincipalDirectory, scopes, runtime)
+        val dispatcher = CommunicationsDispatcher(EmptyPrincipalDirectory, scopes, runtime) { source -> source }
         val event = AgentEvent("1", "sms.received", "+14155550199", 1, mapOf("sender" to "+14155550199"))
 
         dispatcher.dispatch(event, "SMS")
@@ -56,7 +56,12 @@ class CommunicationsDispatcherTest {
             verification = VerificationEngine(),
             replies = NoOpReplySender,
         )
-        val dispatcher = CommunicationsDispatcher(EmptyPrincipalDirectory, scopes, runtime)
+        val dispatcher = CommunicationsDispatcher(EmptyPrincipalDirectory, scopes, runtime) { source ->
+            when (source) {
+                "(415) 555-0199", "+1 415 555 0199" -> "+14155550199"
+                else -> source
+            }
+        }
 
         dispatcher.dispatch(AgentEvent("first", "sms.received", "(415) 555-0199", 1), "SMS")
         dispatcher.dispatch(AgentEvent("second", "sms.received", "+1 415 555 0199", 2), "SMS")
@@ -72,12 +77,39 @@ class CommunicationsDispatcherTest {
     fun notificationSourceUsesStablePackagePrincipalWithoutPhoneNormalization() = runTest {
         val planner = RecordingPlanner()
         val scopes = ScopeRegistry()
-        val dispatcher = CommunicationsDispatcher(EmptyPrincipalDirectory, scopes, runtimeFor(planner, scopes))
+        val dispatcher = CommunicationsDispatcher(EmptyPrincipalDirectory, scopes, runtimeFor(planner, scopes)) { source -> source }
 
         dispatcher.dispatch(AgentEvent("notification", "notification.posted", "com.example.mail", 1), "NOTIFICATION")
 
         assertEquals("notification:com.example.mail", planner.session?.principalId)
         assertEquals(PrincipalRole.UNKNOWN, planner.session?.role)
+    }
+
+    @Test
+    fun callDispatchUsesTelephoneHandleInsteadOfOpaqueCallId() = runTest {
+        val planner = RecordingPlanner()
+        val scopes = ScopeRegistry()
+        val known = Principal("alice", "+14155550100", PrincipalRole.KNOWN)
+        val dispatcher = CommunicationsDispatcher(
+            SinglePrincipalDirectory(known),
+            scopes,
+            runtimeFor(planner, scopes),
+        )
+        val event = AgentEvent(
+            id = "call-state",
+            type = "call.state",
+            source = "telecom:opaque-7",
+            occurredAtEpochMs = 1,
+            payload = mapOf(
+                "callId" to "telecom:opaque-7",
+                "telephoneHandle" to "+14155550100",
+            ),
+        )
+
+        dispatcher.dispatch(event, "CALL")
+
+        assertEquals("alice", planner.session?.principalId)
+        assertEquals(PrincipalRole.KNOWN, planner.session?.role)
     }
 
     private fun runtimeFor(planner: RecordingPlanner, scopes: ScopeRegistry) = AgentRuntime(
@@ -99,6 +131,14 @@ private object EmptyPrincipalDirectory : PrincipalDirectory {
     override suspend fun removeKnown(e164: String): Boolean = false
 }
 
+private class SinglePrincipalDirectory(private val principal: Principal) : PrincipalDirectory {
+    override suspend fun owner(): Principal? = null
+    override suspend fun lookup(e164: String): Principal? = principal.takeIf { it.e164 == e164 }
+    override suspend fun list(): List<Principal> = listOf(principal)
+    override suspend fun upsert(principal: Principal) = Unit
+    override suspend fun removeKnown(e164: String): Boolean = false
+}
+
 private class RecordingPlanner : ModelProvider {
     var session: ScopedAgentSession? = null
     val sessions = mutableListOf<ScopedAgentSession>()
@@ -106,7 +146,7 @@ private class RecordingPlanner : ModelProvider {
     override suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction {
         this.session = session
         sessions += session
-        return PlannedAction.Escalate(com.fsaint.androidagent.runtime.Escalation("escalation", session.id, event.source, "", "", ""))
+        return PlannedAction.Escalate(com.fsaint.androidagent.runtime.Escalation("escalation", session.id, session.channel, event.source, "", "", ""))
     }
 }
 
@@ -120,5 +160,5 @@ private object NoOpAuditStore : AuditStore {
 }
 
 private object NoOpReplySender : ReplySender {
-    override suspend fun send(recipient: String, text: String) = Unit
+    override suspend fun send(channel: String, recipient: String, text: String) = Unit
 }
