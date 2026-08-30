@@ -40,8 +40,12 @@ class OpenAiHttpClient(
         val key = runCatching { keyProvider.apiKey() }.getOrElse { throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED) }
         if (key.isBlank() || key.length > 512) throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED)
         val response = runCatching { transport.execute(OpenAiHttpRequest(endpoint, "Bearer $key", body, timeoutMillis)) }
-            .getOrElse { throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR) }
-        if (response.status !in 200..299 || response.body.toByteArray().size > maxBodyBytes) throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR)
+            .getOrElse { throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR, it::class.simpleName ?: "transport failure") }
+        if (response.status !in 200..299) {
+            val error = if (response.status == 401 || response.status == 403) com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED else com.fsaint.androidagent.model.ToolError.NETWORK_ERROR
+            throw OpenAiProviderException(error, "HTTP ${response.status}")
+        }
+        if (response.body.toByteArray().size > maxBodyBytes) throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR, "response too large")
         return response.body
     }
 
@@ -70,7 +74,7 @@ class OpenAiHttpClient(
     private fun toolName(value: String) = value.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64).ifBlank { "phone_capability" }
 }
 
-class OpenAiProviderException(val error: com.fsaint.androidagent.model.ToolError) : RuntimeException(error.name)
+class OpenAiProviderException(val error: com.fsaint.androidagent.model.ToolError, val detail: String? = null) : RuntimeException(detail ?: error.name)
 
 enum class CredentialOutcome { SAVED, DENIED, FAILED }
 interface OpenAiSecretStore { suspend fun read(): String?; suspend fun write(value: String); suspend fun clear() }

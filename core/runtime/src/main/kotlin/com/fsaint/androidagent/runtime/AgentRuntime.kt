@@ -37,9 +37,10 @@ class AgentRuntime(
                 )
             }.getOrElse {
                 if (it is CancellationException) throw it
-                val message = when ((it as? OpenAiProviderException)?.error) {
-                    ToolError.PERMISSION_REQUIRED -> "The owner API key is unavailable or was rejected. Check Dark Lord settings."
-                    ToolError.NETWORK_ERROR -> "The conversational model request failed. Check the phone's internet connection and API access."
+                val providerError = it as? OpenAiProviderException
+                val message = when (providerError?.error) {
+                    ToolError.PERMISSION_REQUIRED -> "The owner API key was rejected by OpenAI${providerError.detail?.let { " ($it)" }.orEmpty()}."
+                    ToolError.NETWORK_ERROR -> "The conversational model request failed${providerError.detail?.let { " ($it)" }.orEmpty()}."
                     ToolError.NOT_FOUND -> "The conversational model returned an unreadable response."
                     else -> "The conversational model is unavailable right now."
                 }
