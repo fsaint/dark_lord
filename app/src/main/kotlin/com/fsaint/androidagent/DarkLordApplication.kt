@@ -98,8 +98,9 @@ import android.speech.tts.TextToSpeech
 /** Application lifecycle adapter that preserves Telegram's durable shutdown boundary. */
 internal class TelegramUpdatesLifecycle(
     private val updates: TelegramUpdateService,
-) {
-    suspend fun stop() = updates.stop()
+) : TelegramUpdatesLifecyclePort {
+    override fun start(): Job = updates.start()
+    override suspend fun stop() = updates.stop()
 }
 
 /** Coordinates Android application teardown with Telegram's joined polling shutdown. */
@@ -182,7 +183,9 @@ class DarkLordApplication : Application() {
         )
     }
     private val telegramUpdatesLifecycle by lazy { TelegramUpdatesLifecycle(telegramUpdates) }
-    private val shutdownLifecycle by lazy { ApplicationShutdownLifecycle(telegramUpdatesLifecycle, applicationSupervisor) }
+    private val runtimeCoordinator by lazy {
+        AgentRuntimeCoordinator(telegramUpdatesLifecycle, applicationScope)
+    }
     private val conversationModel by lazy { OpenAiHttpClient(UrlConnectionOpenAiTransport(), openAiCredentials) }
     private val conversationHarness by lazy {
         ConversationHarness(
@@ -244,7 +247,8 @@ class DarkLordApplication : Application() {
             mcpCatalog += durableState.mcpConfigurations().map { it.id }
             skillCatalog += durableState.enabledSkillIds()
         }
-        telegramUpdates.start()
+        BootRecoveryDependencies.coordinator = runtimeCoordinator
+        runtimeCoordinator.start()
         SmsBroadcastReceiverDependencies.configure(object : SmsEventSink {
             override fun publish(event: AgentEvent) = smsCapability.publish(event)
         })
@@ -278,10 +282,13 @@ class DarkLordApplication : Application() {
     }
 
     /** Explicitly stops Telegram polling and waits for its durable boundary to close. */
-    suspend fun stopTelegramUpdates() = telegramUpdatesLifecycle.stop()
+    suspend fun stopTelegramUpdates() = runtimeCoordinator.stop()
 
     /** Cancels and joins all application work after Telegram's polling boundary is closed. */
-    suspend fun shutdown() = shutdownLifecycle.shutdown()
+    suspend fun shutdown() {
+        runtimeCoordinator.stop()
+        applicationSupervisor.cancelAndJoin()
+    }
 
     override fun onTerminate() {
         runBlocking { shutdown() }
