@@ -129,12 +129,10 @@ abstract class AgentDatabase : RoomDatabase() {
         }
         val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE tool_effects ADD COLUMN payload BLOB")
-                db.execSQL("ALTER TABLE tool_effects ADD COLUMN success INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE tool_effects ADD COLUMN error TEXT")
-                db.execSQL("ALTER TABLE tool_effects ADD COLUMN recoverable INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE tool_effects ADD COLUMN verification TEXT NOT NULL DEFAULT 'UNVERIFIED'")
-                db.execSQL("UPDATE tool_effects SET payload = replyText")
+                db.execSQL("CREATE TABLE IF NOT EXISTS new_tool_effects (id TEXT NOT NULL, eventId TEXT NOT NULL, tool TEXT NOT NULL, state TEXT NOT NULL, payload BLOB, success INTEGER NOT NULL, error TEXT, recoverable INTEGER NOT NULL, verification TEXT NOT NULL, PRIMARY KEY(id))")
+                db.execSQL("INSERT INTO new_tool_effects (id, eventId, tool, state, payload, success, error, recoverable, verification) SELECT id, eventId, tool, state, replyText, 0, NULL, 0, 'UNVERIFIED' FROM tool_effects")
+                db.execSQL("DROP TABLE tool_effects")
+                db.execSQL("ALTER TABLE new_tool_effects RENAME TO tool_effects")
             }
         }
     }
