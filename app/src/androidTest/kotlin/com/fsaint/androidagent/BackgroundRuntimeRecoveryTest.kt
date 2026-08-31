@@ -32,7 +32,7 @@ class BackgroundRuntimeRecoveryTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
 
     @Test
-    fun lockedBootCompletedKeepsExactlyOneRestoreRequest() {
+    fun lockedBootCompletedDoesNotEnqueueRestoreRequest() {
         WorkManagerTestInitHelper.initializeTestWorkManager(
             context,
             Configuration.Builder()
@@ -47,6 +47,49 @@ class BackgroundRuntimeRecoveryTest {
         val receiver = BootReceiver()
         receiver.onReceive(context, Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED))
         receiver.onReceive(context, Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED))
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(RuntimeRestoreWorker.UNIQUE_WORK_NAME).get()
+        assertEquals(0, workInfos.size)
+    }
+
+    @Test
+    fun userUnlockedKeepsExactlyOneRestoreRequest() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(
+            context,
+            Configuration.Builder()
+                .setExecutor(SynchronousExecutor())
+                .build(),
+        )
+        val workManager = WorkManager.getInstance(context)
+        workManager.cancelAllWork()
+        waitForWorkIdle(workManager)
+        workManager.pruneWork()
+
+        val receiver = BootReceiver()
+        receiver.onReceive(context, Intent(Intent.ACTION_USER_UNLOCKED))
+        receiver.onReceive(context, Intent(Intent.ACTION_USER_UNLOCKED))
+
+        val workInfos = workManager.getWorkInfosForUniqueWork(RuntimeRestoreWorker.UNIQUE_WORK_NAME).get()
+        assertEquals(1, workInfos.size)
+        assertTrue(workInfos.single().state != WorkInfo.State.CANCELLED)
+    }
+
+    @Test
+    fun bootCompletedKeepsExactlyOneRestoreRequest() {
+        WorkManagerTestInitHelper.initializeTestWorkManager(
+            context,
+            Configuration.Builder()
+                .setExecutor(SynchronousExecutor())
+                .build(),
+        )
+        val workManager = WorkManager.getInstance(context)
+        workManager.cancelAllWork()
+        waitForWorkIdle(workManager)
+        workManager.pruneWork()
+
+        val receiver = BootReceiver()
+        receiver.onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
+        receiver.onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
 
         val workInfos = workManager.getWorkInfosForUniqueWork(RuntimeRestoreWorker.UNIQUE_WORK_NAME).get()
         assertEquals(1, workInfos.size)

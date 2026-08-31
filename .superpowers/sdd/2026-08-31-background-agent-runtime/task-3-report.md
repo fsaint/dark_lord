@@ -102,3 +102,60 @@ Output: no whitespace errors.
 
 - The exact `--tests` form in the brief is not accepted by `connectedDebugAndroidTest` in this project. The equivalent runner filter used here is `-Pandroid.testInstrumentationRunnerArguments.class=...`.
 - The duplicate-start guard is based on `BootRecoveryDependencies.coordinator.isRunning`. That covers the intended restore paths, but if future work introduces additional asynchronous startup states before `isRunning` flips true, that path may need a stronger in-flight gate.
+
+## Review Fix: Direct-Boot WorkManager Safety
+
+Review identified a high-severity issue in the original Task 3 boot receiver behavior: `BootReceiver` was still `directBootAware` and listened for `LOCKED_BOOT_COMPLETED`, but it immediately initialized `WorkManager`. That is not safe before first unlock and can fail on direct-boot storage boundaries.
+
+### Fix
+
+- Kept `BootReceiver` `directBootAware=true` so the app still safely receives locked-boot broadcasts.
+- Added a small `BackgroundRuntimeRestoreScheduler` boundary in `BootReceiver`.
+- Changed `LOCKED_BOOT_COMPLETED` handling to defer restore work entirely and avoid touching `WorkManager`.
+- Added `USER_UNLOCKED` to the manifest receiver filter and enqueue path.
+- Kept normal `BOOT_COMPLETED` scheduling intact.
+- Kept `ExistingWorkPolicy.KEEP` and the existing `RuntimeRestoreWorker` retry/failure semantics unchanged.
+
+### Red Verification
+
+Command:
+
+```bash
+./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fsaint.androidagent.BackgroundRuntimeRecoveryTest,com.fsaint.androidagent.BootRecoveryTest --no-daemon
+```
+
+Initial red failure after writing the new tests:
+
+```text
+e: ...BootRecoveryTest.kt: Unresolved reference 'scheduler'
+e: ...BootRecoveryTest.kt: Unresolved reference 'BackgroundRuntimeRestoreScheduler'
+BUILD FAILED
+```
+
+That confirmed the tests were targeting a missing production boundary before implementation.
+
+### Final Verification
+
+Fresh verification command:
+
+```bash
+./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fsaint.androidagent.BackgroundRuntimeRecoveryTest,com.fsaint.androidagent.BootRecoveryTest --no-daemon
+```
+
+Output:
+
+```text
+> Task :app:connectedDebugAndroidTest
+Starting 14 tests on SM-F711U1 - 15
+
+Finished 14 tests on SM-F711U1 - 15
+
+BUILD SUCCESSFUL in 26s
+```
+
+Covered behaviors:
+
+- `LOCKED_BOOT_COMPLETED` does not call the scheduler and does not create restore work.
+- `USER_UNLOCKED` enqueues exactly one unique restore request.
+- `BOOT_COMPLETED` enqueues exactly one unique restore request.
+- Worker restore still preserves dependency-restore ordering, foreground-service start, and retry/failure behavior.

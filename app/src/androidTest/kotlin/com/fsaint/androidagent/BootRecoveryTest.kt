@@ -25,8 +25,62 @@ class BootRecoveryTest {
 
     @Test
     fun unrelatedBroadcastDoesNotCreateRestoreWork() {
-        BootReceiver().onReceive(context, Intent(Intent.ACTION_TIME_CHANGED))
-        assertEquals("dark-lord-runtime-restore", RuntimeRestoreWorker.UNIQUE_WORK_NAME)
+        val previousScheduler = BootReceiver.scheduler
+        val scheduler = RecordingRestoreScheduler()
+        BootReceiver.scheduler = scheduler
+
+        try {
+            BootReceiver().onReceive(context, Intent(Intent.ACTION_TIME_CHANGED))
+
+            assertEquals(0, scheduler.enqueueCalls)
+        } finally {
+            BootReceiver.scheduler = previousScheduler
+        }
+    }
+
+    @Test
+    fun lockedBootCompletedDefersRestoreWithoutTouchingWorkManager() {
+        val previousScheduler = BootReceiver.scheduler
+        val scheduler = RecordingRestoreScheduler()
+        BootReceiver.scheduler = scheduler
+
+        try {
+            BootReceiver().onReceive(context, Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED))
+
+            assertEquals(0, scheduler.enqueueCalls)
+        } finally {
+            BootReceiver.scheduler = previousScheduler
+        }
+    }
+
+    @Test
+    fun bootCompletedEnqueuesRestoreWork() {
+        val previousScheduler = BootReceiver.scheduler
+        val scheduler = RecordingRestoreScheduler()
+        BootReceiver.scheduler = scheduler
+
+        try {
+            BootReceiver().onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
+
+            assertEquals(1, scheduler.enqueueCalls)
+        } finally {
+            BootReceiver.scheduler = previousScheduler
+        }
+    }
+
+    @Test
+    fun userUnlockedEnqueuesRestoreWork() {
+        val previousScheduler = BootReceiver.scheduler
+        val scheduler = RecordingRestoreScheduler()
+        BootReceiver.scheduler = scheduler
+
+        try {
+            BootReceiver().onReceive(context, Intent(Intent.ACTION_USER_UNLOCKED))
+
+            assertEquals(1, scheduler.enqueueCalls)
+        } finally {
+            BootReceiver.scheduler = previousScheduler
+        }
     }
 
     @Test
@@ -62,6 +116,14 @@ class BootRecoveryTest {
             BootRecoveryDependencies.restorer = previousRestorer
             BootRecoveryDependencies.foregroundStarter = previousStarter
         }
+    }
+}
+
+private class RecordingRestoreScheduler : BackgroundRuntimeRestoreScheduler {
+    var enqueueCalls = 0
+
+    override fun enqueue(context: Context) {
+        enqueueCalls += 1
     }
 }
 
