@@ -5,6 +5,7 @@ import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.VerificationState
+import com.fsaint.androidagent.runtime.PendingReply
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,6 +64,30 @@ class EventRepositoryTest {
             assertEquals(record, repository.list().single())
         } finally {
             database.close()
+        }
+    }
+
+    @Test
+    fun pendingReplySurvivesRestartUntilDeliveryIsConfirmed() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val databaseName = "pending-reply-restart.db"
+        val reply = PendingReply("telegram:10", "TELEGRAM", "42", "72%")
+
+        val database = AgentDatabaseTestFactory.open(context, databaseName)
+        try {
+            EventRepository(database.eventDao()).savePendingReply(reply)
+        } finally {
+            database.close()
+        }
+
+        val reopenedDatabase = AgentDatabaseTestFactory.open(context, databaseName)
+        try {
+            val repository = EventRepository(reopenedDatabase.eventDao())
+            assertEquals(reply, repository.pendingReply(reply.eventId))
+            repository.clearPendingReply(reply.eventId)
+            assertEquals(null, repository.pendingReply(reply.eventId))
+        } finally {
+            reopenedDatabase.close()
         }
     }
 }

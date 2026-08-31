@@ -6,7 +6,17 @@ import com.fsaint.androidagent.model.ScopedAgentSession
 import com.fsaint.androidagent.model.ToolCall
 import com.fsaint.androidagent.policy.AgentContext
 
-interface EventStore { suspend fun enqueue(event: AgentEvent); suspend fun markCompleted(eventId: String) }
+/**
+ * Durable event state and its reply outbox.  A reply is stored before transport delivery so a
+ * transient channel failure can retry delivery without re-running the agent or its tools.
+ */
+interface EventStore {
+    suspend fun enqueue(event: AgentEvent)
+    suspend fun pendingReply(eventId: String): PendingReply? = null
+    suspend fun savePendingReply(reply: PendingReply) = Unit
+    suspend fun clearPendingReply(eventId: String) = Unit
+    suspend fun markCompleted(eventId: String)
+}
 interface AuditStore { suspend fun append(record: AuditRecord) }
 interface ModelProvider { suspend fun respond(request: ModelRequest): ModelResponse }
 interface LegacyModelProvider { suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction }
@@ -52,3 +62,4 @@ sealed interface PlannedAction { data class Tool(val call: ToolCall) : PlannedAc
 data class Escalation(val id: String, val sessionId: String, val channel: String, val recipient: String, val question: String, val reason: String, val proposedAction: String)
 enum class OwnerDecision { Approve, Reject }
 data class SentReply(val channel: String, val recipient: String, val text: String)
+data class PendingReply(val eventId: String, val channel: String, val recipient: String, val text: String)

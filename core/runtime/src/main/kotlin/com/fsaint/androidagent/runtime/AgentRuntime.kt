@@ -23,6 +23,12 @@ class AgentRuntime(
 ) {
     suspend fun process(session: ScopedAgentSession, event: AgentEvent) {
         events.enqueue(event)
+        events.pendingReply(event.id)?.let { pending ->
+            replies.send(pending.channel, pending.recipient, pending.text)
+            events.clearPendingReply(event.id)
+            events.markCompleted(event.id)
+            return
+        }
         val harness = conversationHarness
         if (harness != null) {
             val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
@@ -44,13 +50,12 @@ class AgentRuntime(
                     ToolError.NOT_FOUND -> "The conversational model returned an unreadable response."
                     else -> "The conversational model is unavailable right now."
                 }
-                replies.send(session.channel, recipient, message)
-                events.markCompleted(event.id)
+                deliverAndComplete(event, session.channel, recipient, message)
                 return
             }
-            result.response?.let { replies.send(session.channel, recipient, it) }
+            result.response?.let { deliverAndComplete(event, session.channel, recipient, it) }
             if (result.response != null || result.stopReason == ConversationStopReason.TURN_LIMIT) {
-                events.markCompleted(event.id)
+                if (result.response == null) events.markCompleted(event.id)
             }
             return
         }
@@ -60,8 +65,7 @@ class AgentRuntime(
                 val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
                 escalations?.create(action.escalation.copy(channel = session.channel, recipient = recipient))
                 audit.append(auditRecord(event, session, "owner.ask", AuthorizationDecision.ALLOW, VerificationState.UNVERIFIED, "escalated"))
-                replies.send(session.channel, recipient, "I need owner approval before I can continue.")
-                events.markCompleted(event.id)
+                deliverAndComplete(event, session.channel, recipient, "I need owner approval before I can continue.")
             }
         }
     }
@@ -78,7 +82,13 @@ class AgentRuntime(
         }
         audit.append(auditRecord(event, session, action.call.name, authorization, result.verification, result.error?.name ?: text))
         val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
-        replies.send(session.channel, recipient, text)
+        deliverAndComplete(event, session.channel, recipient, text)
+    }
+
+    private suspend fun deliverAndComplete(event: AgentEvent, channel: String, recipient: String, text: String) {
+        events.savePendingReply(PendingReply(event.id, channel, recipient, text))
+        replies.send(channel, recipient, text)
+        events.clearPendingReply(event.id)
         events.markCompleted(event.id)
     }
 

@@ -24,6 +24,7 @@ import com.fsaint.androidagent.model.VerificationState
 @Entity(tableName = "scope_grants") data class ScopeGrantEntity(@PrimaryKey val id: String, val principalId: String, val resourceType: String, val resourceId: String, val granted: Boolean)
 @Entity(tableName = "sessions") data class SessionEntity(@PrimaryKey val id: String, val principalId: String, val scopeId: String, val channel: String, val memoryNamespace: String, val createdAtEpochMs: Long)
 @Entity(tableName = "events") data class EventEntity(@PrimaryKey val id: String, val type: String, val source: String, val occurredAtEpochMs: Long, val payload: ByteArray, val deliveryState: String)
+@Entity(tableName = "pending_replies") data class PendingReplyEntity(@PrimaryKey val eventId: String, val channel: String, val recipient: String, val text: ByteArray)
 @Entity(tableName = "conversation_messages") data class ConversationMessageEntity(@PrimaryKey val id: String, val sessionId: String, val createdAtEpochMs: Long, val content: ByteArray)
 @Entity(tableName = "memory_entries") data class MemoryEntryEntity(@PrimaryKey val id: String, val namespace: String, val updatedAtEpochMs: Long, val content: ByteArray)
 @Entity(tableName = "schedules") data class ScheduleEntity(@PrimaryKey val id: String, val dueAtEpochMs: Long, val definition: ByteArray, val enabled: Boolean)
@@ -44,6 +45,9 @@ import com.fsaint.androidagent.model.VerificationState
     @Query("SELECT deliveryState FROM events WHERE id = :id") suspend fun deliveryState(id: String): String?
     @Query("SELECT * FROM events WHERE deliveryState != 'COMPLETED' ORDER BY occurredAtEpochMs LIMIT 1") suspend fun nextUndelivered(): EventEntity?
     @Query("UPDATE events SET deliveryState = 'COMPLETED' WHERE id = :id") suspend fun markCompleted(id: String)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putPendingReply(entity: PendingReplyEntity)
+    @Query("SELECT * FROM pending_replies WHERE eventId = :eventId") suspend fun pendingReply(eventId: String): PendingReplyEntity?
+    @Query("DELETE FROM pending_replies WHERE eventId = :eventId") suspend fun deletePendingReply(eventId: String)
 }
 
 @Dao interface AuditRecordDao {
@@ -87,7 +91,7 @@ import com.fsaint.androidagent.model.VerificationState
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putVerificationOutcome(value: VerificationOutcomeEntity)
 }
 
-@Database(entities = [PrincipalEntity::class, ScopeGrantEntity::class, SessionEntity::class, EventEntity::class, ConversationMessageEntity::class, MemoryEntryEntity::class, ScheduleEntity::class, CapabilityStatusEntity::class, McpConfigurationEntity::class, OAuthMetadataEntity::class, SkillEntity::class, SkillVersionEntity::class, SkillUpdateAttemptEntity::class, EscalationEntity::class, ToolExecutionEntity::class, VerificationOutcomeEntity::class, AuditRecordEntity::class], version = 3, exportSchema = true)
+@Database(entities = [PrincipalEntity::class, ScopeGrantEntity::class, SessionEntity::class, EventEntity::class, PendingReplyEntity::class, ConversationMessageEntity::class, MemoryEntryEntity::class, ScheduleEntity::class, CapabilityStatusEntity::class, McpConfigurationEntity::class, OAuthMetadataEntity::class, SkillEntity::class, SkillVersionEntity::class, SkillUpdateAttemptEntity::class, EscalationEntity::class, ToolExecutionEntity::class, VerificationOutcomeEntity::class, AuditRecordEntity::class], version = 4, exportSchema = true)
 abstract class AgentDatabase : RoomDatabase() {
     abstract fun eventDao(): EventDao
     abstract fun auditRecordDao(): AuditRecordDao
@@ -108,12 +112,17 @@ abstract class AgentDatabase : RoomDatabase() {
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_principals_e164 ON principals (e164)")
             }
         }
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS pending_replies (eventId TEXT NOT NULL, channel TEXT NOT NULL, recipient TEXT NOT NULL, text BLOB NOT NULL, PRIMARY KEY(eventId))")
+            }
+        }
     }
 }
 
 object AgentDatabaseTestFactory {
     fun open(context: Context, name: String): AgentDatabase = Room.databaseBuilder(context, AgentDatabase::class.java, name)
-        .addMigrations(AgentDatabase.MIGRATION_1_2, AgentDatabase.MIGRATION_2_3)
+        .addMigrations(AgentDatabase.MIGRATION_1_2, AgentDatabase.MIGRATION_2_3, AgentDatabase.MIGRATION_3_4)
         .allowMainThreadQueries()
         .build()
     fun inMemory(context: Context): AgentDatabase = Room.inMemoryDatabaseBuilder(context, AgentDatabase::class.java).allowMainThreadQueries().build()

@@ -8,6 +8,7 @@ import com.fsaint.androidagent.runtime.TelegramUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -69,16 +70,12 @@ class TelegramUpdateService(
     private val checkpointStore: TelegramUpdateCheckpointStore,
     private val clock: () -> Long = System::currentTimeMillis,
     private val pollTimeoutSeconds: Int = DEFAULT_POLL_TIMEOUT_SECONDS,
-) : AutoCloseable {
+) {
     private val lifecycleLock = Any()
+    private val pollLock = Mutex()
     private val stateLock = Mutex()
-    private val deliveredUpdateIds = object : LinkedHashSet<Long>() {
-        override fun add(element: Long): Boolean {
-            val added = super.add(element)
-            while (size > MAX_REMEMBERED_UPDATES) remove(first())
-            return added
-        }
-    }
+    private val deliveredUpdateIds = LinkedHashSet<Long>()
+    private val reservedUpdateIds = mutableSetOf<Long>()
     private var restored = false
     private var nextOffset: Long? = null
 
@@ -105,7 +102,7 @@ class TelegramUpdateService(
     }
 
     /** Performs one bounded poll; public for deterministic lifecycle integration tests. */
-    suspend fun pollOnce(): Boolean {
+    suspend fun pollOnce(): Boolean = pollLock.withLock {
         val requestedOffset = currentOffset()
         val updates = client.getUpdates(requestedOffset, pollTimeoutSeconds.coerceIn(0, MAX_POLL_TIMEOUT_SECONDS))
             .sortedBy(TelegramUpdate::updateId)
@@ -116,9 +113,17 @@ class TelegramUpdateService(
 
     private suspend fun accept(update: TelegramUpdate) {
         val acknowledgedOffset = update.updateId.nextOffset()
-        if (currentOffset()?.let { acknowledgedOffset <= it } == true) return
-        val seen = synchronized(deliveredUpdateIds) { update.updateId in deliveredUpdateIds }
-        if (!seen) {
+        val reserved = stateLock.withLock {
+            restoreOffsetLocked()
+            if (nextOffset?.let { acknowledgedOffset <= it } == true || update.updateId in deliveredUpdateIds || update.updateId in reservedUpdateIds) {
+                false
+            } else {
+                reservedUpdateIds += update.updateId
+                true
+            }
+        }
+        if (!reserved) return
+        try {
             eventSink.accept(
                 AgentEvent(
                     id = "telegram:${update.updateId}",
@@ -129,25 +134,43 @@ class TelegramUpdateService(
                 ),
                 TELEGRAM_CHANNEL,
             )
+            checkpointStore.saveOffset(acknowledgedOffset)
+            stateLock.withLock {
+                nextOffset = maxOf(nextOffset ?: Long.MIN_VALUE, acknowledgedOffset)
+                rememberDeliveredLocked(update.updateId)
+                reservedUpdateIds.remove(update.updateId)
+            }
+        } catch (error: Throwable) {
+            stateLock.withLock { reservedUpdateIds.remove(update.updateId) }
+            throw error
         }
-        checkpointStore.saveOffset(acknowledgedOffset)
-        stateLock.withLock { nextOffset = maxOf(nextOffset ?: Long.MIN_VALUE, acknowledgedOffset) }
-        synchronized(deliveredUpdateIds) { deliveredUpdateIds.add(update.updateId) }
     }
 
     private suspend fun currentOffset(): Long? = stateLock.withLock {
+        restoreOffsetLocked()
+        nextOffset
+    }
+
+    /** Cancels the managed loop and waits for every active poll to leave the durable boundary. */
+    suspend fun stop() {
+        val job = synchronized(lifecycleLock) {
+            pollJob.also { pollJob = null }
+        }
+        job?.cancelAndJoin()
+        pollLock.withLock { }
+    }
+
+    private suspend fun restoreOffsetLocked() {
         if (!restored) {
             nextOffset = checkpointStore.loadOffset()
             restored = true
         }
-        nextOffset
     }
 
-    /** Cancels any in-flight long poll. The caller owns when to stop this lifecycle. */
-    override fun close() {
-        synchronized(lifecycleLock) {
-            pollJob?.cancel()
-            pollJob = null
+    private fun rememberDeliveredLocked(updateId: Long) {
+        deliveredUpdateIds += updateId
+        while (deliveredUpdateIds.size > MAX_REMEMBERED_UPDATES) {
+            deliveredUpdateIds.remove(deliveredUpdateIds.first())
         }
     }
 

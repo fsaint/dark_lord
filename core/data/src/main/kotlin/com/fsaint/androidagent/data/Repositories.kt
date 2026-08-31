@@ -13,6 +13,7 @@ import com.fsaint.androidagent.runtime.EventStore
 import com.fsaint.androidagent.runtime.Escalation
 import com.fsaint.androidagent.runtime.EscalationStore
 import com.fsaint.androidagent.runtime.OwnerDecision
+import com.fsaint.androidagent.runtime.PendingReply
 import java.nio.charset.StandardCharsets
 
 class EventRepository(private val dao: EventDao) : EventStore {
@@ -38,6 +39,16 @@ class EventRepository(private val dao: EventDao) : EventStore {
     suspend fun deliveryState(eventId: String): DeliveryState? = dao.deliveryState(eventId)?.let(DeliveryState::valueOf)
 
     override suspend fun markCompleted(eventId: String) = dao.markCompleted(eventId)
+
+    override suspend fun pendingReply(eventId: String): PendingReply? = dao.pendingReply(eventId)?.let {
+        PendingReply(it.eventId, it.channel, it.recipient, it.text.toString(StandardCharsets.UTF_8))
+    }
+
+    override suspend fun savePendingReply(reply: PendingReply) {
+        dao.putPendingReply(PendingReplyEntity(reply.eventId, reply.channel, reply.recipient, reply.text.toByteArray(StandardCharsets.UTF_8)))
+    }
+
+    override suspend fun clearPendingReply(eventId: String) = dao.deletePendingReply(eventId)
 }
 
 class AuditRepository(private val dao: AuditRecordDao) : AuditStore {

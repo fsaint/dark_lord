@@ -231,7 +231,9 @@ class DarkLordApplication : Application() {
     }
 
     /** Explicitly stops Telegram polling; useful for controlled teardown and token revocation. */
-    fun stopTelegramUpdates() = telegramUpdates.close()
+    fun stopTelegramUpdates() {
+        applicationScope.launch { telegramUpdates.stop() }
+    }
 
     fun communicationsAccessStatus(): CommunicationsAccessStatus {
         val roleManager = getSystemService(RoleManager::class.java)

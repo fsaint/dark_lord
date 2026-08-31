@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class AgentRuntimeTest {
     @Test
@@ -81,5 +82,48 @@ class AgentRuntimeTest {
         runtime.process(owner, AgentEvent("evt-2", "sms.received", "sms", 2))
 
         assertEquals("I couldn't verify that action completed.", replies.sent.single().text)
+    }
+
+    @Test
+    fun failedReplyRetriesStoredResponseWithoutRunningTheToolAgain() = runTest {
+        val events = InMemoryEventStore()
+        val scopes = ScopeRegistry()
+        val owner = scopes.sessionFor(Principal("owner", "+14155550123", PrincipalRole.OWNER), "TELEGRAM")
+        var toolCalls = 0
+        val replies = FailOnceReplySender()
+        val tool: suspend (ToolCall) -> ToolResult<Any> = {
+            toolCalls += 1
+            ToolResult(true, "72%", verification = VerificationState.VERIFIED)
+        }
+        val runtime = AgentRuntime(
+            events,
+            InMemoryAuditStore(),
+            FakeModelProvider(PlannedAction.Tool(ToolCall("device.battery"))),
+            ScopedContextBuilder(scopes, emptyMap()),
+            ScopedToolRouter(mapOf("device.battery" to tool), scopes),
+            VerificationEngine(),
+            replies,
+        )
+        val event = AgentEvent("telegram:10", "telegram.received", "10", 1, mapOf("sender" to "10"))
+
+        assertFailsWith<IllegalStateException> { runtime.process(owner, event) }
+        runtime.process(owner, event)
+
+        assertEquals(1, toolCalls)
+        assertEquals(listOf("72%"), replies.delivered)
+        assertTrue(events.completed.contains(event.id))
+    }
+
+    private class FailOnceReplySender : ReplySender {
+        private var failed = false
+        val delivered = mutableListOf<String>()
+
+        override suspend fun send(channel: String, recipient: String, text: String) {
+            if (!failed) {
+                failed = true
+                throw IllegalStateException("temporary Telegram failure")
+            }
+            delivered += text
+        }
     }
 }

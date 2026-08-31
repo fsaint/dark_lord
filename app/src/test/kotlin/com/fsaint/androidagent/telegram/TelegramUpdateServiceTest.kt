@@ -10,11 +10,13 @@ import com.fsaint.androidagent.runtime.TelegramUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -91,7 +93,7 @@ class TelegramUpdateServiceTest {
         service.start()
         advanceUntilIdle()
         assertTrue(started.isCompleted)
-        service.close()
+        service.stop()
         advanceUntilIdle()
 
         assertFalse(service.isRunning)
@@ -213,6 +215,55 @@ class TelegramUpdateServiceTest {
         assertEquals(listOf<Long?>(null, null), client.offsets)
         assertEquals(listOf(11L), checkpoint.savedOffsets)
         assertEquals(listOf("42" to "reply"), client.sent)
+    }
+
+    @Test
+    fun overlappingPollsReserveAnUpdateBeforeTheSinkCanRunItTwice() = runTest {
+        val client = RecordingTelegramClient(listOf(TelegramUpdate(10, "42", "hello")))
+        val checkpoint = RecordingCheckpointStore()
+        val sinkStarted = CompletableDeferred<Unit>()
+        val releaseSink = CompletableDeferred<Unit>()
+        var sinkRuns = 0
+        val service = service(client, checkpoint) { _, _ ->
+            sinkRuns += 1
+            sinkStarted.complete(Unit)
+            releaseSink.await()
+        }
+
+        val firstPoll = async { service.pollOnce() }
+        sinkStarted.await()
+        val overlappingPoll = async { service.pollOnce() }
+        runCurrent()
+
+        assertEquals(1, sinkRuns)
+        releaseSink.complete(Unit)
+        firstPoll.await()
+        overlappingPoll.await()
+
+        assertEquals(1, sinkRuns)
+        assertEquals(listOf(11L), checkpoint.savedOffsets)
+    }
+
+    @Test
+    fun stoppingWaitsForAnInFlightPollBeforeReturning() = runTest {
+        val client = RecordingTelegramClient(listOf(TelegramUpdate(10, "42", "hello")))
+        val checkpoint = RecordingCheckpointStore()
+        val sinkStarted = CompletableDeferred<Unit>()
+        val releaseSink = CompletableDeferred<Unit>()
+        val service = service(client, checkpoint) { _, _ ->
+            sinkStarted.complete(Unit)
+            releaseSink.await()
+        }
+
+        val poll = async { service.pollOnce() }
+        sinkStarted.await()
+        val stopping = async { service.stop() }
+        runCurrent()
+
+        assertFalse(stopping.isCompleted)
+        releaseSink.complete(Unit)
+        poll.await()
+        stopping.await()
     }
 
     private fun TestScope.service(
