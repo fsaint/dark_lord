@@ -24,23 +24,33 @@ class AgentRuntimeCoordinator(
 ) : AgentRuntimeRecovery {
     private val lifecycleLock = Any()
     private var activeJob: Job? = null
+    private var stopping = false
 
     override val isRunning: Boolean
         get() = synchronized(lifecycleLock) { activeJob?.isActive == true }
 
     override fun start() {
         synchronized(lifecycleLock) {
-            if (activeJob?.isActive == true) return
+            // A Telegram stop clears its own job before that job has fully unwound. Keep the
+            // stopping barrier set until stop() joins it so a concurrent start cannot overlap.
+            if (stopping || activeJob?.isActive == true) return
             activeJob = updates.start()
         }
     }
 
     override suspend fun stop() {
         val job = synchronized(lifecycleLock) {
-            activeJob?.also { activeJob = null }
+            activeJob?.also {
+                activeJob = null
+                stopping = true
+            }
         } ?: return
-        updates.stop()
-        job.join()
+        try {
+            updates.stop()
+            job.join()
+        } finally {
+            synchronized(lifecycleLock) { stopping = false }
+        }
     }
 
     /** Restores the runtime after process recreation without creating a second polling loop. */
