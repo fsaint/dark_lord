@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        AgentRuntimeNotificationFactory(this).ensureChannel()
         setContent {
             var principalSettingsOpen by rememberSaveable { mutableStateOf(false) }
             var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
@@ -97,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     onOpenDiagnostics = { diagnosticsOpen = true },
                     onOpenMcpSettings = { mcpSettingsOpen = true },
                     onOpenBackgroundRuntimeSettings = ::openBackgroundRuntimeSettings,
+                    onOpenRuntimeNotificationSettings = ::openRuntimeNotificationSettings,
                     onSaveOpenAiKey = { value ->
                         lifecycleScope.launch {
                             val outcome = (application as DarkLordApplication).saveOpenAiApiKey(value)
@@ -164,7 +166,7 @@ class MainActivity : ComponentActivity() {
     private fun startBackgroundRuntimeWhenPermitted() {
         val notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        if (shouldStartBackgroundRuntimeWithNotificationPermission(Build.VERSION.SDK_INT, notificationPermissionGranted)) {
+        if (notificationPermissionGranted && BackgroundRuntimeNotificationGate(this).canShowRuntimeNotification()) {
             (application as DarkLordApplication).startBackgroundRuntime()
         } else if (!runtimeNotificationPermissionRequestInFlight && !runtimeNotificationPermissionRequested) {
             runtimeNotificationPermissionRequestInFlight = true
@@ -190,6 +192,10 @@ class MainActivity : ComponentActivity() {
         startActivity(BackgroundRuntimeSettings.intent(packageManager, packageName))
     }
 
+    fun openRuntimeNotificationSettings() {
+        startActivity(BackgroundRuntimeSettings.notificationIntent(packageName))
+    }
+
     private fun requestDialerRoleIfNeeded() {
         val roles = getSystemService(RoleManager::class.java)
         if (roles.isRoleAvailable(RoleManager.ROLE_DIALER) && !roles.isRoleHeld(RoleManager.ROLE_DIALER)) {
@@ -199,11 +205,6 @@ class MainActivity : ComponentActivity() {
 
     private fun communicationsAccessStatus() = (application as DarkLordApplication).communicationsAccessStatus()
 }
-
-internal fun shouldStartBackgroundRuntimeWithNotificationPermission(
-    sdkInt: Int,
-    permissionGranted: Boolean,
-): Boolean = sdkInt < Build.VERSION_CODES.TIRAMISU || permissionGranted
 
 @Composable
 private fun PrincipalSettingsRoute(

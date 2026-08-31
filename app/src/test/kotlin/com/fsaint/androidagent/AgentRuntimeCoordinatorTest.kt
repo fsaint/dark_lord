@@ -3,11 +3,13 @@ package com.fsaint.androidagent
 import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class AgentRuntimeCoordinatorTest {
     @Test
@@ -58,6 +60,62 @@ class AgentRuntimeCoordinatorTest {
 
         updates.completePolling()
         stopping.await()
+    }
+
+    @Test
+    fun stopCancelsAndJoinsServiceOwnedQueuedWork() = runTest {
+        val updates = FakeUpdates()
+        val work = ServiceOwnedRuntimeWorkScope(backgroundScope)
+        val coordinator = AgentRuntimeCoordinator(updates, work)
+        val started = CompletableDeferred<Unit>()
+        val cancelled = CompletableDeferred<Unit>()
+        coordinator.start()
+        coordinator.launch {
+            try {
+                started.complete(Unit)
+                awaitCancellation()
+            } finally {
+                cancelled.complete(Unit)
+            }
+        }
+        started.await()
+
+        coordinator.stop()
+
+        cancelled.await()
+        assertFalse(coordinator.isRunning)
+    }
+
+    @Test
+    fun queuedWorkIsRejectedAfterStopAndAcceptedAfterRestart() = runTest {
+        val updates = FakeUpdates()
+        val work = ServiceOwnedRuntimeWorkScope(backgroundScope)
+        val coordinator = AgentRuntimeCoordinator(updates, work)
+        coordinator.start()
+        coordinator.stop()
+
+        assertEquals(null, coordinator.launch { error("must not run while stopped") })
+
+        coordinator.start()
+        val ran = CompletableDeferred<Unit>()
+        coordinator.launch { ran.complete(Unit) }
+        ran.await()
+        coordinator.stop()
+    }
+
+    @Test
+    fun stopStillCancelsOwnedWorkAfterPollingJobCompletesUnexpectedly() = runTest {
+        val updates = FakeUpdates()
+        val work = ServiceOwnedRuntimeWorkScope(backgroundScope)
+        val coordinator = AgentRuntimeCoordinator(updates, work)
+        coordinator.start()
+        val queuedJob = coordinator.launch { awaitCancellation() }!!
+        updates.completePolling()
+
+        coordinator.stop()
+
+        assertTrue(queuedJob.isCancelled)
+        assertEquals(1, updates.stops)
     }
 
     private class FakeUpdates(private val leavePollingJobRunning: Boolean = false) : TelegramUpdatesLifecyclePort {

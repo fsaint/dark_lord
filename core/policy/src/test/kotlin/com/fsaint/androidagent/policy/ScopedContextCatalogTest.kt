@@ -32,4 +32,18 @@ class ScopedContextCatalogTest {
 
         assertEquals(setOf("sms.reply"), context.resources)
     }
+
+    @Test
+    fun backgroundContextDoesNotAdvertiseSensorTools() {
+        val scopes = ScopeRegistry()
+        val owner = scopes.sessionFor(Principal("owner", null, PrincipalRole.OWNER), "TELEGRAM")
+
+        val context = ScopedContextBuilder(
+            scopes = scopes,
+            memory = emptyMap(),
+            availableTools = setOf("device.battery", "camera.capture", "microphone.record", "screen.capture"),
+        ).build(owner)
+
+        assertEquals(setOf("device.battery"), context.resources)
+    }
 }

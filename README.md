@@ -10,7 +10,7 @@ The primary development device is a Samsung Galaxy Z Flip3 on Android 15. The pr
 
 ## Status
 
-The conversational harness and Stage 12 background-runtime acceptance coverage are implemented. Focused unit checks pass, while connected folded/locked acceptance needs an unlocked SM-F711U1 for setup and operator evidence for live carrier, Telegram, real Notification Access delivery, force-stop, external MCP/Tailscale, posture, and voice flows.
+The conversational harness and Stage 12 background-runtime acceptance coverage are implemented. Runtime/recovery instrumentation passes on the API 35 SM-F711U1. The locked-runtime class currently reports four passes and one intentional skip because its secure-keyguard case requires operator unlock; live carrier, Telegram, real Notification Access delivery, force-stop, external MCP/Tailscale, posture, and voice flows still need operator evidence.
 
 ## Features
 
@@ -22,7 +22,8 @@ The conversational harness and Stage 12 background-runtime acceptance coverage a
 - Device tools for battery/status, installed apps, camera, microphone, audio, radios, location and environment, sensors, NFC, USB, contacts, private files, and screen capture.
 - Scoped authorization by owner, known principal, and unknown principal, with scope-denied responses and escalation support.
 - Owner provisioning, principal management, capability permission flows, Device Owner support, reboot recovery, scheduling, audit records, and bounded diagnostics.
-- Visible foreground runtime service for Telegram polling and queued work, with persistent Stop/Restart notification actions and boot/process recovery where Android permits it.
+- Visible `specialUse` foreground runtime service for user-authorized Telegram polling and queued work, with persistent Stop/Restart notification actions and boot/process recovery only while runtime notifications are enabled.
+- Camera, microphone, and screen tools are removed from background Telegram/SMS/notification model context and denied again at the tool router; they remain available only to explicit foreground, voice, or capture surfaces.
 - OpenAI Responses API conversational harness with model-selected tools, an eight-turn safety budget, one final SMS/voice response, and resumable Room-backed checkpoints.
 - Owner-only OpenAI API-key setup stored in Android Keystore; credentials are excluded from diagnostics, messages, and audit output.
 - MCP connection foundations with scoped discovery, OAuth metadata, Streamable HTTP seams, private Tailscale server support, and network failure handling.

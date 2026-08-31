@@ -4,6 +4,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.fsaint.androidagent.ui.OpenAssistantScreen
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -26,7 +27,7 @@ class ScreenCaptureConsentUiTest {
 
         assertEquals(0, requests)
 
-        compose.onNodeWithText("Allow one screen capture").performClick()
+        compose.onNodeWithText("Allow one screen capture").performScrollTo().performClick()
 
         assertEquals(1, requests)
     }

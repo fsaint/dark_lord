@@ -4,7 +4,7 @@ Use this checklist on the Samsung Galaxy Z Flip3 running Android 15 after instal
 
 ## Automated acceptance check
 
-Run this connected instrumentation check from an unlocked device. The test starts the foreground runtime, verifies notification controls, then puts the device into keyguard lock for the SMS broadcast and handler-level notification translation checks. On a secure-lock device, an operator may need to unlock the phone after the test before running other Compose/UI instrumentation.
+Run this connected instrumentation check from an unlocked device. The test starts the foreground runtime and verifies notification controls. The SMS broadcast and handler-level notification translation check enters keyguard only when the device uses a non-secure keyguard that instrumentation can dismiss. It is intentionally skipped when a PIN, pattern, or password is configured, so the class never leaves the device locked for later tests.
 
 ```sh
 ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fsaint.androidagent.LockedFoldedRuntimeAcceptanceTest --no-daemon
@@ -15,11 +15,13 @@ Expected result:
 - The foreground service reaches `isForeground=true`.
 - The service notification uses the `agent_runtime` channel, notification id `7101`, and exposes **Stop** and **Restart** actions.
 - The notification **Stop** and **Restart** actions change the real foreground service state.
-- SMS broadcast handling and handler-level notification event translation work after the test asserts `KeyguardManager.isKeyguardLocked`.
+- On a non-secure keyguard, SMS broadcast handling and handler-level notification event translation work after the test asserts `KeyguardManager.isKeyguardLocked`, and cleanup verifies the keyguard is dismissed.
 - Telegram transport checkpointing resumes from the persisted update offset after a fresh poller instance.
 - A second runtime start does not create duplicate reply work.
 
-This automated check does not physically fold the hinge, send carrier SMS from another phone, receive a real notification through Android Notification Access from another app, send a live owner Telegram message, or perform a real force-stop/relaunch proof. Those are manual device steps below.
+Current connected status (2026-08-31): on the secure Android 15/API 35 SM-F711U1, this class completed with four passing tests, zero failures, and the secure-keyguard-sensitive test intentionally skipped. The focused service/recovery/boot run completed 29 tests with zero failures, including a real API 35 `specialUse` foreground-service launch.
+
+This automated check does not physically fold the hinge, validate secure-lock delivery, send carrier SMS from another phone, receive a real notification through Android Notification Access from another app, send a live owner Telegram message, or perform a real force-stop/relaunch proof. Those are manual device steps below.
 
 ## Manual folded and locked sequence
 
@@ -27,7 +29,7 @@ This automated check does not physically fold the hinge, send carrier SMS from a
 2. Grant notification, SMS, phone, microphone, and camera permissions requested by the app.
 3. Set Dark Lord as the SMS app and enable notification access.
 4. Enter the owner OpenAI API key and Telegram bot credentials, then save the owner Telegram chat id.
-5. Open the Android app battery settings for Dark Lord and choose unrestricted battery/background usage. Keep Dark Lord notifications enabled.
+5. Open the Android app battery settings for Dark Lord and choose unrestricted battery/background usage. Keep app notifications and the **Agent runtime** channel enabled; boot/sticky restore is intentionally suppressed otherwise.
 6. Enable notification access for Dark Lord and choose a test app whose notifications are safe to inspect.
 7. Return to Dark Lord and confirm the persistent **Dark Lord background access** notification is visible.
 8. Fold the Flip3 and lock the device.
@@ -45,5 +47,5 @@ Record the device model, Android build, app version, battery mode, notification-
 - Android and Samsung policy can still delay, batch, or stop background work under Doze, thermal pressure, low battery, standby buckets, network loss, carrier behavior, or explicit force-stop.
 - A user-visible foreground service improves reliability but does not bypass platform restrictions.
 - UI actions may require unlock. Folded or locked operation must not assume an activity, display, accessibility surface, browser session, or interactive system dialog is available.
-- Browser, microphone, camera, and screen capture are on-demand operations. They are not continuous background operations and are not started by the persistent runtime service.
+- Camera, microphone, and screen tools are excluded from model context and denied by the tool router for Telegram, SMS, and notification sessions. They are available only from explicit foreground, voice, or capture surfaces. Browser automation remains outside the persistent runtime's continuous responsibilities.
 - Notification-listener, SMS, call, and Telegram behavior depends on the corresponding Android role, permission, service access, network availability, and owner/principal configuration.

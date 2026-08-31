@@ -16,6 +16,9 @@ class RuntimeRestoreWorker(appContext: Context, params: WorkerParameters) : Coro
 
         internal suspend fun restoreBackgroundRuntime(
             context: Context,
+            notificationsAvailable: () -> Boolean = {
+                BackgroundRuntimeNotificationGate(context).canShowRuntimeNotification()
+            },
             restoreDependencies: suspend () -> Unit = { BootRecoveryDependencies.restorer.restore() },
             startBackgroundRuntime: () -> Unit = {
                 val application = context.applicationContext as? DarkLordApplication
@@ -26,6 +29,7 @@ class RuntimeRestoreWorker(appContext: Context, params: WorkerParameters) : Coro
                 }
             },
         ) {
+            if (!notificationsAvailable()) return
             restoreDependencies()
             if (!BootRecoveryDependencies.coordinator.isRunning) {
                 startBackgroundRuntime()

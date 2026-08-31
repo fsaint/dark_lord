@@ -108,6 +108,27 @@ class ConversationHarnessTest {
         assertEquals(2, toolCalls)
         assertEquals("done", result.response)
     }
+
+    @Test fun backgroundConversationCannotExecuteModelRequestedCameraTool() = runTest {
+        var executions = 0
+        val model = ScriptedConversationModel(
+            ConversationResponse.Tool(ToolCall("camera.capture")),
+            ConversationResponse.Final("done"),
+        )
+        val harness = ConversationHarness(
+            model,
+            router("camera.capture" to {
+                executions += 1
+                ToolResult(true, "image", verification = VerificationState.VERIFIED)
+            }),
+        )
+
+        val result = harness.run(ConversationRequest(session, event, context, "take a photo"))
+
+        assertEquals(0, executions)
+        val output = result.transcript.turns.filterIsInstance<ConversationTurn.ToolOutput>().single()
+        assertEquals(com.fsaint.androidagent.model.ToolError.SCOPE_DENIED, output.result.error)
+    }
 }
 
 private fun router(vararg tools: Pair<String, suspend (ToolCall) -> ToolResult<*>>) = ScopedToolRouter(

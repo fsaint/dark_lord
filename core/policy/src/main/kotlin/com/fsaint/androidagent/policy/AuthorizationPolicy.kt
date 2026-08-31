@@ -82,10 +82,14 @@ class ScopedContextBuilder(
         val allowedMemory = memory.filterKeys { scopes.permits(session, ResourceType.MEMORY, it) }
         val tools = buildSet {
             if (availableTools.isNotEmpty()) {
-                addAll(availableTools.filter { scopes.permits(session, ResourceType.TOOL, it) })
+                addAll(availableTools.filter {
+                    scopes.permits(session, ResourceType.TOOL, it) && AgentSurfaceToolPolicy.permits(session, it)
+                })
             } else {
                 // Backward-compatible fallback for callers that do not yet provide a catalog.
-                addAll(scopes.resourcesFor(session, ResourceType.TOOL))
+                addAll(scopes.resourcesFor(session, ResourceType.TOOL).filter {
+                    AgentSurfaceToolPolicy.permits(session, it)
+                })
             }
         }
         val mcps = availableMcps.filter { scopes.permits(session, ResourceType.MCP, it) }.toSet()
@@ -98,10 +102,20 @@ class ScopedToolRouter(private val tools: Map<String, suspend (ToolCall) -> Tool
     val availableToolIds: Set<String> get() = tools.keys
 
     suspend fun execute(session: ScopedAgentSession, call: ToolCall): ToolResult<Any> {
+        if (!AgentSurfaceToolPolicy.permits(session, call.name)) return ToolResult(false, error = ToolError.SCOPE_DENIED)
         if (!scopes.permits(session, ResourceType.TOOL, call.name)) return ToolResult(false, error = ToolError.SCOPE_DENIED)
         val tool = tools[call.name] ?: return ToolResult(false, error = ToolError.NOT_FOUND)
         return tool(call)
     }
+}
+
+/** Keeps sensor tools behind a session created by an explicit local user surface. */
+private object AgentSurfaceToolPolicy {
+    private val explicitSensorSurfaces = setOf("FOREGROUND", "LOCAL", "VOICE", "CAPTURE")
+    private val sensorToolPrefixes = listOf("camera.", "microphone.", "screen.")
+
+    fun permits(session: ScopedAgentSession, tool: String): Boolean =
+        sensorToolPrefixes.none(tool::startsWith) || session.channel.uppercase() in explicitSensorSurfaces
 }
 
 class ScopedMcpRouter(private val scopes: ScopeRegistry, private val connections: Set<String>) {

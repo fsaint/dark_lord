@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -61,7 +62,7 @@ class PrototypeAcceptanceTest {
                 onRequestAssistantRole = {}, onRequestCapabilityPermissions = {}, onOpenDiagnostics = { open = true },
             )
         }
-        compose.onNodeWithText("Diagnostics").performClick()
+        compose.onNodeWithText("Diagnostics").performScrollTo().performClick()
         compose.onNodeWithText("Read-only local health snapshot. Sensitive values are redacted.").assertIsDisplayed()
     }
 

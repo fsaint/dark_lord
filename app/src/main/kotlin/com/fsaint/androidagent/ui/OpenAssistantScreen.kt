@@ -45,6 +45,7 @@ fun OpenAssistantScreen(
     onSaveTelegramOwnerChatId: (String) -> Unit = {},
     onOpenMcpSettings: () -> Unit = {},
     onOpenBackgroundRuntimeSettings: () -> Unit = {},
+    onOpenRuntimeNotificationSettings: () -> Unit = {},
 ) {
     var apiKey by remember { mutableStateOf("") }
     var telegramToken by remember { mutableStateOf("") }
@@ -114,7 +115,10 @@ fun OpenAssistantScreen(
                 if (onRequestScreenCapture != null) {
                     OutlinedButton(onClick = onRequestScreenCapture, modifier = Modifier.fillMaxWidth()) { Text("Allow one screen capture") }
                 }
-                BackgroundRuntimeSettingsCard(onOpenSettings = onOpenBackgroundRuntimeSettings)
+                BackgroundRuntimeSettingsCard(
+                    onOpenSettings = onOpenBackgroundRuntimeSettings,
+                    onOpenNotificationSettings = onOpenRuntimeNotificationSettings,
+                )
                 Text("Administration", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 4.dp))
                 OutlinedButton(onClick = onOpenPrincipalSettings, modifier = Modifier.fillMaxWidth()) { Text("Communications settings") }
                 OutlinedButton(onClick = onOpenMcpSettings, modifier = Modifier.fillMaxWidth()) { Text("MCP server settings") }

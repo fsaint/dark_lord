@@ -14,7 +14,8 @@
 
 - Minimum SDK remains 31 and target SDK remains 35.
 - Background operation is user-visible through an ongoing notification.
-- No microphone, camera, screen capture, or hidden UI automation starts from the persistent service.
+- Background Telegram, SMS, and notification sessions neither receive nor execute microphone, camera, or screen tools; only explicit foreground, voice, or capture surfaces may use them.
+- Boot, sticky, and explicit starts are gated on app notification permission and the runtime notification channel so the runtime never operates hidden.
 - Telegram polling must have one active job at a time and preserve its existing durable offset/idempotency boundary.
 - Folded and locked behavior must never assume an activity or display is available.
 

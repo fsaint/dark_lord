@@ -15,7 +15,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class AgentRuntimeService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -26,6 +29,7 @@ class AgentRuntimeService : Service() {
             foreground = foreground,
             scope = serviceScope,
             stopSelfResult = { startId -> stopSelfResult(startId) },
+            notificationsAvailable = { BackgroundRuntimeNotificationGate(this).canShowRuntimeNotification() },
         )
     }
 
@@ -40,6 +44,7 @@ class AgentRuntimeService : Service() {
         handler.handle(intent, startId)
 
     override fun onDestroy() {
+        runBlocking { handler.shutdown() }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -49,6 +54,7 @@ class AgentRuntimeService : Service() {
         const val ACTION_STOP = "com.fsaint.androidagent.runtime.STOP"
         const val ACTION_RESTART = "com.fsaint.androidagent.runtime.RESTART"
         const val CHANNEL_ID = "agent_runtime"
+        const val SPECIAL_USE_SUBTYPE = "user_authorized_persistent_agent_runtime"
 
         internal const val NOTIFICATION_ID = 7101
 
@@ -67,44 +73,75 @@ internal class AgentRuntimeServiceCommandHandler(
     private val coordinator: AgentRuntimeRecovery,
     private val foreground: AgentRuntimeForegroundController,
     private val scope: CoroutineScope,
-    private val stopSelfResult: (Int) -> Unit,
+    private val stopSelfResult: (Int) -> Boolean,
+    private val notificationsAvailable: () -> Boolean = { true },
 ) {
+    private val commands = Channel<Command>(Channel.UNLIMITED)
+    private val commandJob = scope.launch {
+        for (command in commands) {
+            when (command) {
+                Command.Start -> coordinator.start()
+                is Command.Stop -> {
+                    coordinator.stop()
+                    stopSelfResult(command.startId)
+                }
+                Command.Restart -> {
+                    coordinator.stop()
+                    coordinator.start()
+                }
+            }
+        }
+    }
+    private val lifecycleLock = Any()
+    private var destroyed = false
+
     fun handle(intent: Intent?, startId: Int): Int {
         return when (intent?.action ?: AgentRuntimeService.ACTION_START) {
             AgentRuntimeService.ACTION_STOP -> {
-                stopRuntime(startId)
+                enqueue(Command.Stop(startId))
                 Service.START_NOT_STICKY
             }
             AgentRuntimeService.ACTION_RESTART -> {
-                restartRuntime()
-                Service.START_STICKY
+                startOrReject(Command.Restart, startId)
             }
             else -> {
-                startRuntime()
-                Service.START_STICKY
+                startOrReject(Command.Start, startId)
             }
         }
     }
 
-    private fun startRuntime() {
+    private fun startOrReject(command: Command, startId: Int): Int {
+        if (!notificationsAvailable()) {
+            enqueue(Command.Stop(startId))
+            return Service.START_NOT_STICKY
+        }
         foreground.start()
-        coordinator.start()
+        enqueue(command)
+        return Service.START_STICKY
     }
 
-    private fun stopRuntime(startId: Int) {
-        scope.launch {
-            coordinator.stop()
-            foreground.stop()
-            stopSelfResult(startId)
+    private fun enqueue(command: Command) {
+        synchronized(lifecycleLock) {
+            if (!destroyed) commands.trySend(command).getOrThrow()
         }
     }
 
-    private fun restartRuntime() {
-        scope.launch {
-            foreground.start()
-            coordinator.stop()
-            coordinator.start()
+    /** Stops all runtime work before removing the notification during service destruction. */
+    suspend fun shutdown() {
+        synchronized(lifecycleLock) {
+            if (destroyed) return
+            destroyed = true
+            commands.close()
         }
+        commandJob.cancelAndJoin()
+        coordinator.stop()
+        foreground.stop()
+    }
+
+    private sealed interface Command {
+        data object Start : Command
+        data class Stop(val startId: Int) : Command
+        data object Restart : Command
     }
 }
 
@@ -127,7 +164,7 @@ private class AndroidAgentRuntimeForegroundController(
             service.startForeground(
                 AgentRuntimeService.NOTIFICATION_ID,
                 notifications.build(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
             )
         } else {
             service.startForeground(AgentRuntimeService.NOTIFICATION_ID, notifications.build())

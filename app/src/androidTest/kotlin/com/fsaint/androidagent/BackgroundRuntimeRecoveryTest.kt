@@ -109,6 +109,7 @@ class BackgroundRuntimeRecoveryTest {
         try {
             RuntimeRestoreWorker.restoreBackgroundRuntime(
                 context,
+                notificationsAvailable = { true },
                 startBackgroundRuntime = {
                 starts += 1
                 events += "start"
@@ -122,6 +123,20 @@ class BackgroundRuntimeRecoveryTest {
             BootRecoveryDependencies.coordinator = previousCoordinator
             BootRecoveryDependencies.restorer = previousRestorer
         }
+    }
+
+    @Test
+    fun restoreWorkerDoesNotRestoreOrStartWhenRuntimeNotificationIsUnavailable() = runBlocking {
+        val events = mutableListOf<String>()
+
+        RuntimeRestoreWorker.restoreBackgroundRuntime(
+            context,
+            notificationsAvailable = { false },
+            restoreDependencies = { events += "restore" },
+            startBackgroundRuntime = { events += "start" },
+        )
+
+        assertTrue(events.isEmpty())
     }
 
     @Test
@@ -161,6 +176,7 @@ class BackgroundRuntimeRecoveryTest {
         compose.onNodeWithText("Disable battery optimization for Dark Lord if you want reliable Telegram polling.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Keep notifications enabled.").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Open battery settings").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Open notification settings").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -183,6 +199,15 @@ class BackgroundRuntimeRecoveryTest {
 
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, intent.action)
         assertEquals("package:${context.packageName}", intent.dataString)
+    }
+
+    @Test
+    fun notificationSettingsIntentOpensRuntimeChannelSettings() {
+        val intent = BackgroundRuntimeSettings.notificationIntent(context.packageName)
+
+        assertEquals(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, intent.action)
+        assertEquals(context.packageName, intent.getStringExtra(Settings.EXTRA_APP_PACKAGE))
+        assertEquals(AgentRuntimeService.CHANNEL_ID, intent.getStringExtra(Settings.EXTRA_CHANNEL_ID))
     }
 
     private fun waitForWorkIdle(workManager: WorkManager) {

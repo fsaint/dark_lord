@@ -40,10 +40,18 @@ object BackgroundRuntimeSettings {
             intent(packageName, canRequestIgnoreBatteryOptimizations = false)
         }
     }
+
+    fun notificationIntent(packageName: String): Intent =
+        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID, AgentRuntimeService.CHANNEL_ID)
 }
 
 @Composable
-fun BackgroundRuntimeSettingsCard(onOpenSettings: () -> Unit) {
+fun BackgroundRuntimeSettingsCard(
+    onOpenSettings: () -> Unit,
+    onOpenNotificationSettings: () -> Unit = {},
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -55,6 +63,9 @@ fun BackgroundRuntimeSettingsCard(onOpenSettings: () -> Unit) {
             }
             Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
                 Text("Open battery settings")
+            }
+            Button(onClick = onOpenNotificationSettings, modifier = Modifier.fillMaxWidth()) {
+                Text("Open notification settings")
             }
         }
     }

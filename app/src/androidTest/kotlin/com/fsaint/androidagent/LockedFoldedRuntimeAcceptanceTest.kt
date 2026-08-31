@@ -36,7 +36,9 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.FileInputStream
@@ -115,10 +117,14 @@ class LockedFoldedRuntimeAcceptanceTest {
     }
 
     @Test
-    fun lockedKeyguardAcceptsSmsBroadcastAndHandlerLevelNotificationTranslation() {
+    fun nonSecureKeyguardAcceptsSmsBroadcastAndHandlerLevelNotificationTranslation() {
         grantPostNotificationsIfNeeded()
         val application = context.applicationContext as DarkLordApplication
         val keyguard = context.getSystemService(KeyguardManager::class.java)
+        assumeFalse(
+            "Secure keyguard cannot be unlocked by instrumentation; run the secure-lock sequence manually.",
+            keyguard.isDeviceSecure,
+        )
         val smsSink = RecordingSmsSink()
         val notificationSink = RecordingNotificationSink()
 
@@ -142,6 +148,10 @@ class LockedFoldedRuntimeAcceptanceTest {
         } finally {
             shell("input keyevent KEYCODE_WAKEUP")
             shell("wm dismiss-keyguard")
+            waitUntil("non-secure keyguard was not dismissed during cleanup") {
+                !keyguard.isKeyguardLocked
+            }
+            assertFalse("test must leave the device unlocked", keyguard.isKeyguardLocked)
             application.stopBackgroundRuntime()
         }
 

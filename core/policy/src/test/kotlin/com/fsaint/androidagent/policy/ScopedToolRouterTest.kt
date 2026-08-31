@@ -31,6 +31,49 @@ class ScopedToolRouterTest {
     }
 
     @Test
+    fun backgroundChannelsCannotExecuteSensorToolsEvenForOwner() = runTest {
+        val calls = mutableListOf<String>()
+        val handler: suspend (ToolCall) -> ToolResult<Any> = { call ->
+            calls += call.name
+            ToolResult(true, "captured", verification = VerificationState.VERIFIED)
+        }
+        val router = ScopedToolRouter(
+            mapOf(
+                "camera.capture" to handler,
+                "microphone.record" to handler,
+                "screen.capture" to handler,
+            ),
+        )
+        val scopes = ScopeRegistry()
+        val owner = Principal("owner", "+14155550123", PrincipalRole.OWNER)
+
+        listOf("TELEGRAM", "SMS", "NOTIFICATION").forEach { channel ->
+            listOf("camera.capture", "microphone.record", "screen.capture").forEach { tool ->
+                val result = router.execute(scopes.sessionFor(owner, channel), ToolCall(tool))
+
+                assertEquals(ToolError.SCOPE_DENIED, result.error, "$channel must deny $tool")
+            }
+        }
+        assertTrue(calls.isEmpty())
+    }
+
+    @Test
+    fun explicitForegroundVoiceAndCaptureSurfacesCanExecuteSensorTools() = runTest {
+        val handler: suspend (ToolCall) -> ToolResult<Any> = {
+            ToolResult(true, "captured", verification = VerificationState.VERIFIED)
+        }
+        val router = ScopedToolRouter(mapOf("camera.capture" to handler))
+        val scopes = ScopeRegistry()
+        val owner = Principal("owner", "+14155550123", PrincipalRole.OWNER)
+
+        listOf("FOREGROUND", "VOICE", "CAPTURE", "local").forEach { channel ->
+            val result = router.execute(scopes.sessionFor(owner, channel), ToolCall("camera.capture"))
+
+            assertTrue(result.success, "$channel should permit an explicitly initiated capture")
+        }
+    }
+
+    @Test
     fun unknownCannotCallLocationEvenWhenPlannerRequestsIt() = runTest {
         val calls = mutableListOf<String>()
         val handler: suspend (ToolCall) -> ToolResult<Any> = { _: ToolCall -> calls += "location.current"; ToolResult(true, "San Francisco", verification = VerificationState.VERIFIED) }

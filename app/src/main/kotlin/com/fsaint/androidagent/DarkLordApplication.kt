@@ -172,20 +172,21 @@ class DarkLordApplication : Application() {
     val telegramBotCredentials by lazy { OwnerOnlyTelegramBotCredentialStore(AndroidTelegramBotSecretStore(this)) }
     private val telegramClient by lazy { TelegramBotClient(UrlConnectionTelegramTransport(), telegramBotCredentials) }
     private val telegramReplies by lazy { TelegramReplySender(telegramClient) }
+    private val serviceOwnedRuntimeWork by lazy { ServiceOwnedRuntimeWorkScope(applicationScope) }
     private val telegramUpdates by lazy {
         TelegramUpdateService(
             client = telegramClient,
             scope = applicationScope,
             eventSink = IdempotentTelegramInboundEventSink(
                 eventState = eventStore::deliveryState,
-                delegate = TelegramInboundEventSink { event, channel -> dispatcher.dispatch(event, channel) },
+                delegate = TelegramInboundEventSink { event, channel -> dispatchNow(event, channel) },
             ),
             checkpointStore = SharedPreferencesTelegramUpdateCheckpointStore(this),
         )
     }
     private val telegramUpdatesLifecycle by lazy { TelegramUpdatesLifecycle(telegramUpdates) }
     private val runtimeCoordinator by lazy {
-        AgentRuntimeCoordinator(telegramUpdatesLifecycle, applicationScope)
+        AgentRuntimeCoordinator(telegramUpdatesLifecycle, serviceOwnedRuntimeWork)
     }
     private val conversationModel by lazy { OpenAiHttpClient(UrlConnectionOpenAiTransport(), openAiCredentials) }
     private val conversationHarness by lazy {
@@ -285,6 +286,7 @@ class DarkLordApplication : Application() {
     suspend fun stopTelegramUpdates() = runtimeCoordinator.stop()
 
     fun startBackgroundRuntime() {
+        if (!BackgroundRuntimeNotificationGate(this).canShowRuntimeNotification()) return
         if (BootRecoveryDependencies.coordinator.isRunning) return
         ContextCompat.startForegroundService(this, AgentRuntimeService.startIntent(this))
     }
@@ -351,17 +353,24 @@ class DarkLordApplication : Application() {
     }
 
     private fun dispatch(event: AgentEvent, channel: String) {
-        applicationScope.launch {
-            if (channel == "SMS" && event.type == "sms.received" && event.payload["body"].isAdministrativeCommand()) {
-                val normalizedSource = phoneNumbers.normalize(event.source)
-                val sender = principals.lookup(normalizedSource)
-                    ?: Principal("unknown:$normalizedSource", normalizedSource, PrincipalRole.UNKNOWN)
-                ownerCommandProcessor.process(sender, event)
-            } else if (channel == "SMS" && event.type in SMS_TRANSPORT_EVENTS) {
-                recordSmsTransportEvidence(event)
-            } else {
-                dispatcher.dispatch(event, channel)
-            }
+        val block: suspend () -> Unit = { dispatchNow(event, channel) }
+        if (channel in SERVICE_OWNED_CHANNELS) {
+            runtimeCoordinator.launch(block)
+        } else {
+            applicationScope.launch { block() }
+        }
+    }
+
+    private suspend fun dispatchNow(event: AgentEvent, channel: String) {
+        if (channel == "SMS" && event.type == "sms.received" && event.payload["body"].isAdministrativeCommand()) {
+            val normalizedSource = phoneNumbers.normalize(event.source)
+            val sender = principals.lookup(normalizedSource)
+                ?: Principal("unknown:$normalizedSource", normalizedSource, PrincipalRole.UNKNOWN)
+            ownerCommandProcessor.process(sender, event)
+        } else if (channel == "SMS" && event.type in SMS_TRANSPORT_EVENTS) {
+            recordSmsTransportEvidence(event)
+        } else {
+            dispatcher.dispatch(event, channel)
         }
     }
 
@@ -405,6 +414,7 @@ class DarkLordApplication : Application() {
             android.Manifest.permission.CALL_PHONE,
         )
         val SMS_TRANSPORT_EVENTS = setOf("sms.sent", "sms.delivered")
+        val SERVICE_OWNED_CHANNELS = setOf("SMS", "NOTIFICATION", "TELEGRAM")
     }
 }
 

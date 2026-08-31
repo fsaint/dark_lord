@@ -84,7 +84,7 @@ class BootRecoveryTest {
     }
 
     @Test
-    fun lockedBootRestoreRestoresDependenciesBeforeStartingForegroundService() = runBlocking {
+    fun restoreWorkerRestoresDependenciesBeforeStartingForegroundService() = runBlocking {
         val previousCoordinator = BootRecoveryDependencies.coordinator
         val previousRestorer = BootRecoveryDependencies.restorer
         val previousStarter = BootRecoveryDependencies.foregroundStarter
@@ -101,6 +101,7 @@ class BootRecoveryTest {
         try {
             RuntimeRestoreWorker.restoreBackgroundRuntime(
                 context,
+                notificationsAvailable = { true },
                 startBackgroundRuntime = {
                     starter.start(context)
                     events += "start"
