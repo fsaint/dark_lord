@@ -65,7 +65,7 @@ class OpenAiHttpClient(
         val tool = field(response, "tool") ?: field(response, "name")
         if (tool != null && (response.contains("function_call") || response.contains("\"tool\""))) {
             val canonical = context.resources.firstOrNull { toolName(it) == tool } ?: tool
-            return ConversationResponse.Tool(com.fsaint.androidagent.model.ToolCall(canonical))
+            return ConversationResponse.Tool(com.fsaint.androidagent.model.ToolCall(canonical, arguments(response)))
         }
         val final = field(response, "output_text") ?: field(response, "text")
         return final?.let(ConversationResponse::Final) ?: throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NOT_FOUND)
@@ -74,7 +74,10 @@ class OpenAiHttpClient(
     private fun requestBody(event: AgentEvent, context: AgentContext, userText: String = event.payload["body"].orEmpty(), transcript: ConversationTranscript? = null): String {
         val history = transcript?.turns.orEmpty().joinToString("\\n") { it.toString() }
         val tools = context.resources.joinToString(",") {
-            "{\"type\":\"function\",\"name\":\"${toolName(it)}\",\"description\":\"Phone capability: ${escape(it)}\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}"
+            val parameters = if (it == "browser.open")
+                "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"HTTPS URL to open\"}},\"required\":[\"url\"],\"additionalProperties\":false}"
+            else "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+            "{\"type\":\"function\",\"name\":\"${toolName(it)}\",\"description\":\"Phone capability: ${escape(it)}\",\"parameters\":$parameters}"
         }
         val inventory = buildString {
             append("Available phone tools: ").append(context.resources.sorted().joinToString(", "))
@@ -86,6 +89,11 @@ class OpenAiHttpClient(
     }
 
     private fun field(json: String, name: String): String? = Regex("\\\"$name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"").find(json)?.groupValues?.get(1)
+    private fun arguments(json: String): Map<String, String> {
+        val body = Regex("\\\"arguments\\\"\\s*:\\s*\\{([^}]*)}").find(json)?.groupValues?.get(1) ?: return emptyMap()
+        return Regex("\\\"([^\\\"]+)\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").findAll(body)
+            .associate { it.groupValues[1] to it.groupValues[2].replace("\\\\\"", "\"").replace("\\\\\\\\", "\\\\") }
+    }
     private fun escape(value: String) = value.replace("\\", "\\\\").replace("\"", "\\\"").take(16_384)
     private fun toolName(value: String) = value.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64).ifBlank { "phone_capability" }
 }

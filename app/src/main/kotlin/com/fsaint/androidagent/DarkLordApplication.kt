@@ -148,6 +148,7 @@ class DarkLordApplication : Application() {
     private val mcpCatalog = ConcurrentHashMap.newKeySet<String>()
     private val skillCatalog = ConcurrentHashMap.newKeySet<String>()
     private val telegramOwnerChat by lazy { TelegramOwnerChatStore(this) }
+    private val browserTools by lazy { BrowserTools() }
     private val durableState by lazy { DurableStateRepository(database.durableStateDao()) }
     private val agentTools by lazy {
         ScopedToolRouter(
@@ -160,7 +161,8 @@ class DarkLordApplication : Application() {
                 microphoneCapability.toolHandlers() +
                 audioCapability.toolHandlers() +
                 radioCapability.toolHandlers() +
-                environmentCapability.toolHandlers(),
+                environmentCapability.toolHandlers() +
+                browserTools.handlers(),
             scopes,
         )
     }

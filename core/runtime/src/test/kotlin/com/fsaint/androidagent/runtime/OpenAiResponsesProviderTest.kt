@@ -45,6 +45,22 @@ class OpenAiResponsesProviderTest {
     }
 
     @Test
+    fun forwardsBrowserUrlArgumentsAndAdvertisesUrlSchema() = runTest {
+        val transport = FakeTransport { request ->
+            assertTrue(request.body.contains("\"name\":\"browser_open\""))
+            assertTrue(request.body.contains("\"url\":{\"type\":\"string\""))
+            OpenAiHttpResponse(200, "{\"tool\":\"browser_open\",\"arguments\":{\"url\":\"https://example.com\"}}")
+        }
+        val client = OpenAiHttpClient(transport, StaticApiKey("sk-test"))
+        val response = client.respond(ConversationRequest(session, event, AgentContext(setOf("browser.open"), emptyMap()), "open example"))
+
+        assertEquals(
+            ConversationResponse.Tool(com.fsaint.androidagent.model.ToolCall("browser.open", mapOf("url" to "https://example.com"))),
+            response,
+        )
+    }
+
+    @Test
     fun rejectsInsecureOrOversizedResponsesWithoutLeakingKey() = runTest {
         val provider = OpenAiResponsesProvider(OpenAiHttpClient(FakeTransport { OpenAiHttpResponse(200, "x".repeat(100)) }, StaticApiKey("sk-secret"), maxBodyBytes = 32))
         val result = runCatching { provider.plan(session, event, context) }
