@@ -17,7 +17,7 @@ No production runtime code was changed. The test consumes the Task 1 runtime coo
 
 - Real foreground-service launch from `MainActivity`, with `dumpsys activity services` proving `isForeground=true`, `channel=agent_runtime`, and notification id `7101`.
 - The notification factory exposes an ongoing notification with **Stop** and **Restart** actions.
-- SMS and notification-listener events are accepted through Android-managed entry points without depending on a foreground activity.
+- SMS events are accepted through the broadcast handler and notification events are translated at the handler level without depending on a foreground activity.
 - `SharedPreferencesTelegramUpdateCheckpointStore` restores the first Telegram poll offset after a fresh `TelegramUpdateService` instance, matching the force-stop/relaunch recovery boundary.
 - `AgentRuntimeCoordinator.start()` remains idempotent so a second start does not create duplicate reply work.
 
@@ -145,10 +145,10 @@ Review required the automated acceptance test and documentation to stop overstat
 
 ### Changes
 
-- Changed `LockedFoldedRuntimeAcceptanceTest.lockedKeyguardAcceptsSmsAndNotificationEventsThroughAndroidEntryPoints` to start the runtime from an unlocked activity, send `KEYCODE_SLEEP`, wait until `KeyguardManager.isKeyguardLocked` is true, assert that lock state, and then invoke/verify SMS and notification-listener entry paths before cleanup.
+- Changed the locked-keyguard acceptance test to start the runtime from an unlocked activity, send `KEYCODE_SLEEP`, wait until `KeyguardManager.isKeyguardLocked` is true, assert that lock state, and then invoke/verify SMS broadcast handling and handler-level notification translation before cleanup.
 - Added `notificationActionsStopAndRestartTheForegroundRuntimeService`, which sends the notification **Stop** and **Restart** `PendingIntent`s and verifies the real service foreground state changes through `dumpsys activity services`.
 - Renamed the Telegram checkpoint test to `telegramTransportCheckpointRestoresOffsetForRelaunchedPoller` so the automated test is explicit about covering the transport checkpoint seam rather than claiming a live force-stop/relaunch proof.
-- Updated Stage 12 documentation to distinguish automated service/action/keyguard/transport checks from manual physical hinge folding, live owner Telegram/SMS delivery, notification-listener evidence from another app, and force-stop/relaunch recovery.
+- Updated Stage 12 documentation to distinguish automated service/action/keyguard/transport checks from manual physical hinge folding, live owner Telegram/SMS delivery, real Android Notification Access delivery from another app, and force-stop/relaunch recovery.
 - Updated README and getting-started wording to avoid claiming a fresh full connected gate while the device remains operator-locked.
 
 ### Verification
@@ -207,3 +207,26 @@ The focused connected test and full `connectedDebugAndroidTest` suite were not r
 
 - The corrected locked-keyguard test intentionally locks the device. On secure-lock configurations, cleanup can wake and request keyguard dismissal, but cannot enter the user credential. Running the full connected suite immediately after this test may require operator unlock.
 - The automated Telegram coverage remains a checkpoint/transport relaunch test. Live force-stop/relaunch, owner Telegram delivery, and duplicate reply evidence are manual Stage 12 steps.
+
+## Notification delivery wording review fix
+
+Review identified one remaining overclaim: the automated test directly invokes `AgentNotificationListenerService.onNotificationPosted()`, so it proves handler-level notification event translation while the keyguard is locked, not Android-bound Notification Access delivery from another app.
+
+### Changes
+
+- Renamed the automated locked test to `lockedKeyguardAcceptsSmsBroadcastAndHandlerLevelNotificationTranslation`.
+- Updated the Stage 12 automated expectations to say "handler-level notification event translation" and explicitly reserve real Android Notification Access delivery from another app for manual validation.
+- Updated README and getting-started wording to use "real Notification Access delivery" only for manual/operator evidence.
+- Updated this report's latest review-fix language to avoid calling direct `onNotificationPosted()` invocation Android-managed notification-listener delivery.
+
+### Verification
+
+Required verification for this wording-only/test-name follow-up:
+
+```sh
+./gradlew :app:compileDebugAndroidTestKotlin --no-daemon
+./gradlew testDebugUnitTest --no-daemon
+git diff --check
+```
+
+Results are recorded in the follow-up commit handoff.

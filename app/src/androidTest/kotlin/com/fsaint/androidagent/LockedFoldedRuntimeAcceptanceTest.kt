@@ -115,7 +115,7 @@ class LockedFoldedRuntimeAcceptanceTest {
     }
 
     @Test
-    fun lockedKeyguardAcceptsSmsAndNotificationEventsThroughAndroidEntryPoints() {
+    fun lockedKeyguardAcceptsSmsBroadcastAndHandlerLevelNotificationTranslation() {
         grantPostNotificationsIfNeeded()
         val application = context.applicationContext as DarkLordApplication
         val keyguard = context.getSystemService(KeyguardManager::class.java)
@@ -131,7 +131,7 @@ class LockedFoldedRuntimeAcceptanceTest {
                 waitUntil("device did not enter keyguard lock state", timeoutMillis = 10_000) {
                     keyguard.isKeyguardLocked
                 }
-                assertTrue("locked entry-path check must execute while keyguard is locked", keyguard.isKeyguardLocked)
+                assertTrue("locked handler-level check must execute while keyguard is locked", keyguard.isKeyguardLocked)
 
                 SmsBroadcastReceiver(smsSink).onReceive(context, smsDeliverIntent(PDU_BATTERY))
                 AgentNotificationListenerService(notificationSink).apply {
