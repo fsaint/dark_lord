@@ -147,6 +147,7 @@ class DarkLordApplication : Application() {
     private val scopes = ScopeRegistry()
     private val mcpCatalog = ConcurrentHashMap.newKeySet<String>()
     private val skillCatalog = ConcurrentHashMap.newKeySet<String>()
+    private val telegramOwnerChat = TelegramOwnerChatStore(this)
     private val durableState by lazy { DurableStateRepository(database.durableStateDao()) }
     private val agentTools by lazy {
         ScopedToolRouter(
@@ -229,7 +230,9 @@ class DarkLordApplication : Application() {
             conversationHarness = conversationHarness,
         )
     }
-    private val dispatcher by lazy { CommunicationsDispatcher(principals, scopes, runtime, phoneNumbers) }
+    private val dispatcher by lazy {
+        CommunicationsDispatcher(principals, scopes, runtime, telegramOwnerChatId = { telegramOwnerChat.read() }, phoneNumbers = phoneNumbers)
+    }
     private val ownerCommands by lazy { OwnerSmsCommandHandler(principals, ::ownerStatus, escalationService::resolve) }
     private val ownerCommandProcessor by lazy { OwnerSmsCommandProcessor(ownerCommands, eventStore, auditStore, replies) }
 
@@ -311,6 +314,8 @@ class DarkLordApplication : Application() {
         val owner = principals.owner() ?: return CredentialOutcome.DENIED
         return telegramBotCredentials.set(owner, value)
     }
+
+    fun saveTelegramOwnerChatId(value: String): Boolean = telegramOwnerChat.write(value)
 
     suspend fun mcpConfigurations(): List<McpConfigurationEntity> = durableState.mcpConfigurations()
     suspend fun addMcpServer(draft: com.fsaint.androidagent.ui.McpServerDraft): Result<Unit> = runCatching {

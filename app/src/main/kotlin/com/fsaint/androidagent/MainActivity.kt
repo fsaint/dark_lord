@@ -105,6 +105,10 @@ class MainActivity : ComponentActivity() {
                             Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
                         }
                     },
+                    onSaveTelegramOwnerChatId = { value ->
+                        val saved = (application as DarkLordApplication).saveTelegramOwnerChatId(value)
+                        Toast.makeText(this@MainActivity, if (saved) "Telegram owner ID saved." else "Enter a numeric Telegram chat ID.", Toast.LENGTH_LONG).show()
+                    },
                 )
             }
         }

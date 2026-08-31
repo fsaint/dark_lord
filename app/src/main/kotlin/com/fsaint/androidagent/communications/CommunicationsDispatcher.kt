@@ -11,6 +11,7 @@ class CommunicationsDispatcher(
     private val principals: PrincipalDirectory,
     private val scopes: ScopeRegistry,
     private val runtime: AgentRuntime,
+    private val telegramOwnerChatId: suspend () -> String? = { null },
     private val phoneNumbers: PhoneNumberNormalizer = PhoneNumberNormalizer { it },
 ) {
     suspend fun dispatch(event: AgentEvent, channel: String) {
@@ -21,6 +22,9 @@ class CommunicationsDispatcher(
                 ?.takeIf(String::isNotBlank)
                 ?.let { resolveTelephonePrincipal(it) }
                 ?: Principal("unknown:${event.payload["callId"] ?: event.source}", null, PrincipalRole.UNKNOWN)
+            "TELEGRAM" -> if (event.source == telegramOwnerChatId()) {
+                principals.owner() ?: Principal("unknown:${event.source}", null, PrincipalRole.UNKNOWN)
+            } else Principal("unknown:${event.source}", null, PrincipalRole.UNKNOWN)
             "NOTIFICATION" -> Principal("notification:${event.source}", null, PrincipalRole.UNKNOWN)
             else -> Principal("unknown:${event.source}", null, PrincipalRole.UNKNOWN)
         }
