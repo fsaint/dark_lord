@@ -75,6 +75,7 @@ import com.fsaint.androidagent.telegram.TelegramUpdateService
 import com.fsaint.androidagent.telegram.SharedPreferencesTelegramUpdateCheckpointStore
 import com.fsaint.androidagent.telegram.IdempotentTelegramInboundEventSink
 import com.fsaint.androidagent.telegram.TelegramInboundEventSink
+import java.util.concurrent.ConcurrentHashMap
 import com.fsaint.androidagent.oem.samsungflip3.AgentSurfaceRegistry
 import com.fsaint.androidagent.oem.samsungflip3.AndroidDisplayProvider
 import com.fsaint.androidagent.oem.samsungflip3.DisplayBackedPostureProvider
@@ -144,6 +145,8 @@ class DarkLordApplication : Application() {
     private val screenCaptureAdapter by lazy { AndroidScreenCaptureAdapter(this) }
     private val screenCapability by lazy { ScreenCapability(screenCaptureAdapter) }
     private val scopes = ScopeRegistry()
+    private val mcpCatalog = ConcurrentHashMap.newKeySet<String>()
+    private val skillCatalog = ConcurrentHashMap.newKeySet<String>()
     private val durableState by lazy { DurableStateRepository(database.durableStateDao()) }
     private val agentTools by lazy {
         ScopedToolRouter(
@@ -216,6 +219,8 @@ class DarkLordApplication : Application() {
                 scopes = scopes,
                 memory = emptyMap(),
                 availableTools = agentTools.availableToolIds,
+                availableMcps = mcpCatalog,
+                availableSkills = skillCatalog,
             ),
             tools = agentTools,
             verification = VerificationEngine(),
@@ -230,6 +235,10 @@ class DarkLordApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        applicationScope.launch {
+            mcpCatalog += durableState.mcpConfigurations().map { it.id }
+            skillCatalog += durableState.enabledSkillIds()
+        }
         telegramUpdates.start()
         SmsBroadcastReceiverDependencies.configure(object : SmsEventSink {
             override fun publish(event: AgentEvent) = smsCapability.publish(event)
@@ -308,9 +317,11 @@ class DarkLordApplication : Application() {
         require(draft.name.isNotBlank()) { "Enter a display name." }
         require(draft.endpoint.startsWith("https://")) { "MCP endpoints must use HTTPS." }
         require(draft.endpoint.length <= 512) { "Endpoint is too long." }
-        durableState.save(McpConfigurationEntity(java.util.UUID.randomUUID().toString(), draft.name.take(80), com.fsaint.androidagent.ui.encodeMcpDraft(draft)))
+        val id = java.util.UUID.randomUUID().toString()
+        durableState.save(McpConfigurationEntity(id, draft.name.take(80), com.fsaint.androidagent.ui.encodeMcpDraft(draft)))
+        mcpCatalog += id
     }
-    suspend fun removeMcpServer(id: String) { durableState.deleteMcpConfiguration(id) }
+    suspend fun removeMcpServer(id: String) { durableState.deleteMcpConfiguration(id); mcpCatalog.remove(id) }
 
     fun acceptScreenCaptureGrant(resultCode: Int, data: Intent?) {
         screenCaptureAdapter.acceptGrant(resultCode, data)
