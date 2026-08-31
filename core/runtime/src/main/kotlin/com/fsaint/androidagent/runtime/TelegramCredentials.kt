@@ -28,7 +28,7 @@ class OwnerOnlyTelegramBotCredentialStore(
         ?: throw IllegalStateException("Telegram bot token is not configured")
 
     override suspend fun set(owner: Principal, token: String): CredentialOutcome {
-        val normalized = token.trim()
+        val normalized = token.filterNot(Char::isWhitespace)
         if (owner.role != PrincipalRole.OWNER || !isValidToken(normalized)) {
             return CredentialOutcome.DENIED
         }

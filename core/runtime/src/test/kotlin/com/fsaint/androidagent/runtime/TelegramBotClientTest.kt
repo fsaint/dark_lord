@@ -1,12 +1,23 @@
 package com.fsaint.androidagent.runtime
 
 import kotlinx.coroutines.test.runTest
+import com.fsaint.androidagent.model.PrincipalRole
+import com.fsaint.androidagent.policy.Principal
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class TelegramBotClientTest {
+    @Test
+    fun acceptsTokensPastedWithWhitespaceAroundAndInsideToken() = runTest {
+        val store = RecordingSecretStore()
+        val credentials = OwnerOnlyTelegramBotCredentialStore(store)
+        val outcome = credentials.set(Principal("owner", null, PrincipalRole.OWNER), "  123456:abcdefghij\r\nklmnopqrst  ")
+
+        assertEquals(CredentialOutcome.SAVED, outcome)
+        assertEquals("123456:abcdefghijklmnopqrst", store.value)
+    }
     private val token = "123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZabcd"
 
     @Test
@@ -112,6 +123,13 @@ class TelegramBotClientTest {
 
     private class MissingToken : TelegramBotTokenProvider {
         override suspend fun apiToken(): String = error("missing")
+    }
+
+    private class RecordingSecretStore : TelegramBotSecretStore {
+        var value: String? = null
+        override suspend fun read(): String? = value
+        override suspend fun write(value: String) { this.value = value }
+        override suspend fun clear() { value = null }
     }
 
     private class FakeTransport(private val response: TelegramHttpResponse) : TelegramHttpTransport {
