@@ -31,7 +31,7 @@ class OpenAiHttpClient(
 
     override suspend fun respond(request: ConversationRequest): ConversationResponse {
         val body = requestBody(request.event, request.context, request.userText, request.transcript)
-        return parseConversation(request(body))
+        return parseConversation(request(body), request.context)
     }
 
     private suspend fun request(body: String): String {
@@ -61,9 +61,12 @@ class OpenAiHttpClient(
         return PlannedAction.Tool(com.fsaint.androidagent.model.ToolCall(tool))
     }
 
-    private fun parseConversation(response: String): ConversationResponse {
+    private fun parseConversation(response: String, context: AgentContext): ConversationResponse {
         val tool = field(response, "tool") ?: field(response, "name")
-        if (tool != null && (response.contains("function_call") || response.contains("\"tool\""))) return ConversationResponse.Tool(com.fsaint.androidagent.model.ToolCall(tool))
+        if (tool != null && (response.contains("function_call") || response.contains("\"tool\""))) {
+            val canonical = context.resources.firstOrNull { toolName(it) == tool } ?: tool
+            return ConversationResponse.Tool(com.fsaint.androidagent.model.ToolCall(canonical))
+        }
         val final = field(response, "output_text") ?: field(response, "text")
         return final?.let(ConversationResponse::Final) ?: throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NOT_FOUND)
     }
@@ -73,7 +76,13 @@ class OpenAiHttpClient(
         val tools = context.resources.joinToString(",") {
             "{\"type\":\"function\",\"name\":\"${toolName(it)}\",\"description\":\"Phone capability: ${escape(it)}\",\"parameters\":{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}}"
         }
-        return "{\"model\":\"gpt-4o-mini\",\"input\":\"${escape(userText)}\\n${escape(history)}\",\"tools\":[$tools]}"
+        val inventory = buildString {
+            append("Available phone tools: ").append(context.resources.sorted().joinToString(", "))
+            if (context.mcpResources.isNotEmpty()) append(". Available MCP servers: ").append(context.mcpResources.sorted().joinToString(", "))
+            if (context.skillResources.isNotEmpty()) append(". Available skills: ").append(context.skillResources.sorted().joinToString(", "))
+            append('.')
+        }
+        return "{\"model\":\"gpt-4o-mini\",\"input\":\"${escape(inventory)}\\n${escape(userText)}\\n${escape(history)}\",\"tools\":[$tools]}"
     }
 
     private fun field(json: String, name: String): String? = Regex("\\\"$name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"").find(json)?.groupValues?.get(1)

@@ -29,6 +29,22 @@ class OpenAiResponsesProviderTest {
     }
 
     @Test
+    fun includesInventoryAndMapsModelToolNamesBackToCanonicalIds() = runTest {
+        val transport = FakeTransport { request ->
+            assertTrue(request.body.contains("Available phone tools: device.battery"))
+            OpenAiHttpResponse(200, "{\"tool\":\"device_battery\"}")
+        }
+        val client = OpenAiHttpClient(transport, StaticApiKey("sk-test"))
+        val response = client.respond(ConversationRequest(
+            session = session,
+            event = event,
+            context = AgentContext(setOf("device.battery"), emptyMap()),
+            userText = "What tools do you have?",
+        ))
+        assertEquals(ConversationResponse.Tool(com.fsaint.androidagent.model.ToolCall("device.battery")), response)
+    }
+
+    @Test
     fun rejectsInsecureOrOversizedResponsesWithoutLeakingKey() = runTest {
         val provider = OpenAiResponsesProvider(OpenAiHttpClient(FakeTransport { OpenAiHttpResponse(200, "x".repeat(100)) }, StaticApiKey("sk-secret"), maxBodyBytes = 32))
         val result = runCatching { provider.plan(session, event, context) }

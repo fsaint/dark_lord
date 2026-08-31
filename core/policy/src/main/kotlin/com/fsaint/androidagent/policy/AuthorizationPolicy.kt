@@ -64,7 +64,12 @@ class ScopeRegistry {
     }
 }
 
-data class AgentContext(val resources: Set<String>, val memory: Map<String, List<String>>)
+data class AgentContext(
+    val resources: Set<String>,
+    val memory: Map<String, List<String>>,
+    val mcpResources: Set<String> = emptySet(),
+    val skillResources: Set<String> = emptySet(),
+)
 
 class ScopedContextBuilder(
     private val scopes: ScopeRegistry,
@@ -75,7 +80,7 @@ class ScopedContextBuilder(
 ) {
     fun build(session: ScopedAgentSession): AgentContext {
         val allowedMemory = memory.filterKeys { scopes.permits(session, ResourceType.MEMORY, it) }
-        val resources = buildSet {
+        val tools = buildSet {
             if (availableTools.isNotEmpty()) {
                 addAll(availableTools.filter { scopes.permits(session, ResourceType.TOOL, it) })
             } else {
@@ -83,7 +88,9 @@ class ScopedContextBuilder(
                 addAll(scopes.resourcesFor(session, ResourceType.TOOL))
             }
         }
-        return AgentContext(resources, allowedMemory)
+        val mcps = availableMcps.filter { scopes.permits(session, ResourceType.MCP, it) }.toSet()
+        val skills = availableSkills.filter { scopes.permits(session, ResourceType.SKILL, it) }.toSet()
+        return AgentContext(tools, allowedMemory, mcps, skills)
     }
 }
 
