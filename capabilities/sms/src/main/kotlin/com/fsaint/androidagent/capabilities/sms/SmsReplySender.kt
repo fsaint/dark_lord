@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.telephony.SmsManager
+import android.telephony.SubscriptionManager
 import androidx.core.content.ContextCompat
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.ToolError
@@ -112,7 +113,14 @@ private class PlatformSmsTransport(private val context: Context) : SmsTransport 
         sentIntent: PendingIntent,
         deliveredIntent: PendingIntent,
     ) {
-        val manager = subscriptionId?.let { SmsManager.getDefault().createForSubscriptionId(it) } ?: SmsManager.getDefault()
+        val selectedSubscription = subscriptionId
+            ?: SmsManager.getDefaultSmsSubscriptionId().takeIf { it != SubscriptionManager.INVALID_SUBSCRIPTION_ID }
+            ?: context.getSystemService(SubscriptionManager::class.java)
+                ?.activeSubscriptionInfoList
+                ?.firstOrNull()
+                ?.subscriptionId
+        val manager = selectedSubscription?.let { SmsManager.getSmsManagerForSubscriptionId(it) }
+            ?: SmsManager.getDefault()
         manager.sendTextMessage(destination, null, body, sentIntent, deliveredIntent)
     }
 }
