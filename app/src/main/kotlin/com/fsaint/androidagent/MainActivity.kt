@@ -94,6 +94,17 @@ class MainActivity : ComponentActivity() {
                             Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
                         }
                     },
+                    onSaveTelegramToken = { value ->
+                        lifecycleScope.launch {
+                            val outcome = (application as DarkLordApplication).saveTelegramBotToken(value)
+                            val message = when (outcome) {
+                                CredentialOutcome.SAVED -> "Telegram bot token saved."
+                                CredentialOutcome.DENIED -> "Token rejected. Use an owner account and a valid Telegram bot token."
+                                CredentialOutcome.FAILED -> "Could not save the Telegram bot token."
+                            }
+                            Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+                        }
+                    },
                 )
             }
         }

@@ -67,6 +67,7 @@ import com.fsaint.androidagent.runtime.VerificationEngine
 import com.fsaint.androidagent.runtime.ConversationHarness
 import com.fsaint.androidagent.runtime.OpenAiHttpClient
 import com.fsaint.androidagent.runtime.OwnerOnlyOpenAiCredentialStore
+import com.fsaint.androidagent.runtime.OwnerOnlyTelegramBotCredentialStore
 import com.fsaint.androidagent.runtime.CredentialOutcome
 import com.fsaint.androidagent.oem.samsungflip3.AgentSurfaceRegistry
 import com.fsaint.androidagent.oem.samsungflip3.AndroidDisplayProvider
@@ -132,6 +133,7 @@ class DarkLordApplication : Application() {
         )
     }
     private val openAiCredentials by lazy { OwnerOnlyOpenAiCredentialStore(AndroidOpenAiSecretStore(this)) }
+    val telegramBotCredentials by lazy { OwnerOnlyTelegramBotCredentialStore(AndroidTelegramBotSecretStore(this)) }
     private val conversationModel by lazy { OpenAiHttpClient(UrlConnectionOpenAiTransport(), openAiCredentials) }
     private val conversationHarness by lazy {
         ConversationHarness(conversationModel, agentTools, RoomConversationCheckpointStore(DurableStateRepository(database.durableStateDao())))
@@ -227,6 +229,11 @@ class DarkLordApplication : Application() {
     suspend fun saveOpenAiApiKey(value: String): CredentialOutcome {
         val owner = principals.owner() ?: return CredentialOutcome.DENIED
         return openAiCredentials.set(owner, value)
+    }
+
+    suspend fun saveTelegramBotToken(value: String): CredentialOutcome {
+        val owner = principals.owner() ?: return CredentialOutcome.DENIED
+        return telegramBotCredentials.set(owner, value)
     }
 
     suspend fun mcpConfigurations(): List<McpConfigurationEntity> = durableState.mcpConfigurations()

@@ -40,9 +40,11 @@ fun OpenAssistantScreen(
     onOpenNotificationListenerSettings: () -> Unit = {},
     onOpenDiagnostics: () -> Unit = {},
     onSaveOpenAiKey: (String) -> Unit = {},
+    onSaveTelegramToken: (String) -> Unit = {},
     onOpenMcpSettings: () -> Unit = {},
 ) {
     var apiKey by remember { mutableStateOf("") }
+    var telegramToken by remember { mutableStateOf("") }
     DarkLordTheme {
         Scaffold(
             topBar = { TopAppBar(title = { Text("Dark Lord") }) },
@@ -69,6 +71,20 @@ fun OpenAssistantScreen(
                             singleLine = true,
                         )
                         Button(onClick = { onSaveOpenAiKey(apiKey); apiKey = "" }, modifier = Modifier.fillMaxWidth(), enabled = apiKey.isNotBlank()) { Text("Save model key") }
+                        OutlinedTextField(
+                            value = telegramToken,
+                            onValueChange = { telegramToken = it },
+                            label = { Text("Telegram bot token") },
+                            placeholder = { Text("123456:…") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                        )
+                        OutlinedButton(
+                            onClick = { onSaveTelegramToken(telegramToken); telegramToken = "" },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = telegramToken.isNotBlank(),
+                        ) { Text("Save Telegram bot token") }
                     }
                 }
                 HorizontalDivider()
