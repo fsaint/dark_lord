@@ -15,6 +15,9 @@ interface EventStore {
     suspend fun pendingReply(eventId: String): PendingReply? = null
     suspend fun savePendingReply(reply: PendingReply) = Unit
     suspend fun clearPendingReply(eventId: String) = Unit
+    /** Reserves an external tool effect before the tool is allowed to mutate device state. */
+    suspend fun reserveToolEffect(eventId: String, tool: ToolCall): ToolEffectReservation = ToolEffectReservation.Reserved
+    suspend fun completeToolEffect(eventId: String, tool: ToolCall, replyText: String) = Unit
     suspend fun markCompleted(eventId: String)
 }
 interface AuditStore { suspend fun append(record: AuditRecord) }
@@ -63,3 +66,8 @@ data class Escalation(val id: String, val sessionId: String, val channel: String
 enum class OwnerDecision { Approve, Reject }
 data class SentReply(val channel: String, val recipient: String, val text: String)
 data class PendingReply(val eventId: String, val channel: String, val recipient: String, val text: String)
+sealed interface ToolEffectReservation {
+    data object Reserved : ToolEffectReservation
+    data object Pending : ToolEffectReservation
+    data class Completed(val replyText: String) : ToolEffectReservation
+}

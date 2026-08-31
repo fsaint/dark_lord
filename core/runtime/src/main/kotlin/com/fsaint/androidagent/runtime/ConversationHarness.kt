@@ -61,6 +61,7 @@ class ConversationHarness(
     private val tools: ScopedToolRouter,
     private val checkpoints: ConversationCheckpointStore = InMemoryConversationCheckpointStore(),
     private val maxTurns: Int = MAX_TURNS,
+    private val toolEffects: EventStore? = null,
 ) {
     init { require(maxTurns in 1..MAX_TURNS) }
 
@@ -90,7 +91,19 @@ class ConversationHarness(
                 }
                 is ConversationResponse.Tool -> {
                     calls += response.call
-                    val result = tools.execute(request.session, response.call)
+                    val result: ToolResult<Any> = when (val effect = toolEffects?.reserveToolEffect(request.event.id, response.call)) {
+                        is ToolEffectReservation.Completed -> ToolResult<Any>(true, effect.replyText)
+                        ToolEffectReservation.Pending -> ToolResult<Any>(false, error = com.fsaint.androidagent.model.ToolError.FAILED, recoverable = true)
+                        ToolEffectReservation.Reserved, null -> {
+                            val executed = tools.execute(request.session, response.call)
+                            toolEffects?.completeToolEffect(
+                                request.event.id,
+                                response.call,
+                                executed.payload?.toString() ?: executed.error?.name.orEmpty(),
+                            )
+                            executed
+                        }
+                    }
                     transcript = transcript.copy(
                         turns = transcript.turns + ConversationTurn.AssistantTool(response.call) + ConversationTurn.ToolOutput(response.call, result),
                         nextTurn = transcript.nextTurn + 1,

@@ -9,6 +9,7 @@ import com.fsaint.androidagent.policy.Principal
 import com.fsaint.androidagent.policy.ScopeRegistry
 import com.fsaint.androidagent.policy.ScopedToolRouter
 import com.fsaint.androidagent.policy.ScopedContextBuilder
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -111,6 +112,35 @@ class AgentRuntimeTest {
 
         assertEquals(1, toolCalls)
         assertEquals(listOf("72%"), replies.delivered)
+        assertTrue(events.completed.contains(event.id))
+    }
+
+    @Test
+    fun cancelledAfterToolEffectIsCheckpointedDoesNotRunTheToolAgainOnReplay() = runTest {
+        val events = InMemoryEventStore()
+        val scopes = ScopeRegistry()
+        val owner = scopes.sessionFor(Principal("owner", "+14155550123", PrincipalRole.OWNER), "TELEGRAM")
+        var toolCalls = 0
+        val tool: suspend (ToolCall) -> ToolResult<Any> = {
+            toolCalls += 1
+            ToolResult(true, "72%", verification = VerificationState.VERIFIED)
+        }
+        val runtime = AgentRuntime(
+            events,
+            InMemoryAuditStore(),
+            FakeModelProvider(PlannedAction.Tool(ToolCall("device.battery"))),
+            ScopedContextBuilder(scopes, emptyMap()),
+            ScopedToolRouter(mapOf("device.battery" to tool), scopes),
+            VerificationEngine(),
+            InMemoryReplySender(),
+        )
+        val event = AgentEvent("telegram:11", "telegram.received", "10", 1, mapOf("sender" to "10"))
+        events.failNextPendingReplySave = CancellationException("process interrupted after tool")
+
+        assertFailsWith<CancellationException> { runtime.process(owner, event) }
+        runtime.process(owner, event)
+
+        assertEquals(1, toolCalls)
         assertTrue(events.completed.contains(event.id))
     }
 

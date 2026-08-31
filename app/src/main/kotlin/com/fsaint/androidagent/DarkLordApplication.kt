@@ -91,6 +91,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import android.speech.tts.TextToSpeech
 
+/** Application lifecycle adapter that preserves Telegram's durable shutdown boundary. */
+internal class TelegramUpdatesLifecycle(
+    private val updates: TelegramUpdateService,
+) {
+    suspend fun stop() = updates.stop()
+}
+
 class DarkLordApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val database by lazy { EncryptedAgentDatabaseFactory.open(this) }
@@ -153,9 +160,15 @@ class DarkLordApplication : Application() {
             checkpointStore = SharedPreferencesTelegramUpdateCheckpointStore(this),
         )
     }
+    private val telegramUpdatesLifecycle by lazy { TelegramUpdatesLifecycle(telegramUpdates) }
     private val conversationModel by lazy { OpenAiHttpClient(UrlConnectionOpenAiTransport(), openAiCredentials) }
     private val conversationHarness by lazy {
-        ConversationHarness(conversationModel, agentTools, RoomConversationCheckpointStore(DurableStateRepository(database.durableStateDao())))
+        ConversationHarness(
+            conversationModel,
+            agentTools,
+            RoomConversationCheckpointStore(DurableStateRepository(database.durableStateDao())),
+            toolEffects = eventStore,
+        )
     }
     private val eventStore by lazy { EventRepository(database.eventDao()) }
     private val auditStore by lazy { AuditRepository(database.auditRecordDao()) }
@@ -230,10 +243,8 @@ class DarkLordApplication : Application() {
         AgentSurfaceRegistry.coverContent = { CoverAssistantScreen() }
     }
 
-    /** Explicitly stops Telegram polling; useful for controlled teardown and token revocation. */
-    fun stopTelegramUpdates() {
-        applicationScope.launch { telegramUpdates.stop() }
-    }
+    /** Explicitly stops Telegram polling and waits for its durable boundary to close. */
+    suspend fun stopTelegramUpdates() = telegramUpdatesLifecycle.stop()
 
     fun communicationsAccessStatus(): CommunicationsAccessStatus {
         val roleManager = getSystemService(RoleManager::class.java)

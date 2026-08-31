@@ -6,6 +6,8 @@ import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.VerificationState
 import com.fsaint.androidagent.runtime.PendingReply
+import com.fsaint.androidagent.runtime.ToolEffectReservation
+import com.fsaint.androidagent.model.ToolCall
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -86,6 +88,30 @@ class EventRepositoryTest {
             assertEquals(reply, repository.pendingReply(reply.eventId))
             repository.clearPendingReply(reply.eventId)
             assertEquals(null, repository.pendingReply(reply.eventId))
+        } finally {
+            reopenedDatabase.close()
+        }
+    }
+
+    @Test
+    fun toolEffectReservationSurvivesRestartAndPreventsReplay() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val databaseName = "tool-effect-restart-${System.nanoTime()}.db"
+        val call = ToolCall("device.battery")
+
+        val database = AgentDatabaseTestFactory.open(context, databaseName)
+        try {
+            assertEquals(ToolEffectReservation.Reserved, EventRepository(database.eventDao()).reserveToolEffect("telegram:10", call))
+        } finally {
+            database.close()
+        }
+
+        val reopenedDatabase = AgentDatabaseTestFactory.open(context, databaseName)
+        try {
+            val repository = EventRepository(reopenedDatabase.eventDao())
+            assertEquals(ToolEffectReservation.Pending, repository.reserveToolEffect("telegram:10", call))
+            repository.completeToolEffect("telegram:10", call, "72%")
+            assertEquals(ToolEffectReservation.Completed("72%"), repository.reserveToolEffect("telegram:10", call))
         } finally {
             reopenedDatabase.close()
         }

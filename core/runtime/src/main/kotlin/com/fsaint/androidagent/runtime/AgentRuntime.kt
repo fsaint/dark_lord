@@ -71,6 +71,18 @@ class AgentRuntime(
     }
 
     private suspend fun processTool(session: ScopedAgentSession, event: AgentEvent, action: PlannedAction.Tool) {
+        val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
+        when (val effect = events.reserveToolEffect(event.id, action.call)) {
+            is ToolEffectReservation.Completed -> {
+                deliverAndComplete(event, session.channel, recipient, effect.replyText)
+                return
+            }
+            ToolEffectReservation.Pending -> {
+                deliverAndComplete(event, session.channel, recipient, "I couldn't verify that the previous action completed, so I won't repeat it automatically.")
+                return
+            }
+            ToolEffectReservation.Reserved -> Unit
+        }
         val result = tools.execute(session, action.call)
         val verified = verification.isVerified(result)
         val authorization = if (result.error == ToolError.SCOPE_DENIED) AuthorizationDecision.DENY else AuthorizationDecision.ALLOW
@@ -80,8 +92,8 @@ class AgentRuntime(
             result.error == ToolError.SCOPE_DENIED -> "I’m not allowed to access that."
             else -> "I couldn't verify that action completed."
         }
+        events.completeToolEffect(event.id, action.call, text)
         audit.append(auditRecord(event, session, action.call.name, authorization, result.verification, result.error?.name ?: text))
-        val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
         deliverAndComplete(event, session.channel, recipient, text)
     }
 

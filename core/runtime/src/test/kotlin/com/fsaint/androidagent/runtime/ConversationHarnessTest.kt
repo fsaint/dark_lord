@@ -9,10 +9,12 @@ import com.fsaint.androidagent.policy.AgentContext
 import com.fsaint.androidagent.policy.Principal
 import com.fsaint.androidagent.policy.ScopeRegistry
 import com.fsaint.androidagent.policy.ScopedToolRouter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class ConversationHarnessTest {
     private val event = AgentEvent("e1", "user.message", "+1", 1, mapOf("body" to "hello"))
@@ -53,6 +55,36 @@ class ConversationHarnessTest {
 
         assertEquals("done", result.response)
         assertTrue(checkpoints.load("conversation-1") == null)
+    }
+
+    @Test fun replayAfterProcessInterruptionDoesNotRepeatACompletedToolEffect() = runTest {
+        val effects = InMemoryEventStore()
+        var toolCalls = 0
+        var interruptAfterTool = true
+        val model = object : ConversationModel {
+            override suspend fun respond(request: ConversationRequest): ConversationResponse = when {
+                request.transcript.turns.any { it is ConversationTurn.ToolOutput } && interruptAfterTool -> {
+                    interruptAfterTool = false
+                    throw CancellationException("process interrupted")
+                }
+                request.transcript.turns.any { it is ConversationTurn.ToolOutput } -> ConversationResponse.Final("done")
+                else -> ConversationResponse.Tool(ToolCall("device.battery"))
+            }
+        }
+        val harness = ConversationHarness(
+            model,
+            router("device.battery" to {
+                toolCalls += 1
+                ToolResult(true, "72%", verification = VerificationState.VERIFIED)
+            }),
+            toolEffects = effects,
+        )
+
+        assertFailsWith<CancellationException> { harness.run(ConversationRequest(session, event, context, "hello")) }
+        val replay = harness.run(ConversationRequest(session, event, context, "hello"))
+
+        assertEquals(1, toolCalls)
+        assertEquals("done", replay.response)
     }
 }
 

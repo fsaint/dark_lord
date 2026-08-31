@@ -1,5 +1,6 @@
 package com.fsaint.androidagent.telegram
 
+import com.fsaint.androidagent.TelegramUpdatesLifecycle
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.DeliveryState
 import com.fsaint.androidagent.runtime.TelegramMessagingClient
@@ -257,7 +258,7 @@ class TelegramUpdateServiceTest {
 
         val poll = async { service.pollOnce() }
         sinkStarted.await()
-        val stopping = async { service.stop() }
+        val stopping = async { TelegramUpdatesLifecycle(service).stop() }
         runCurrent()
 
         assertFalse(stopping.isCompleted)
