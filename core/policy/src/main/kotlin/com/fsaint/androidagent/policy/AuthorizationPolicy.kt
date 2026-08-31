@@ -66,17 +66,30 @@ class ScopeRegistry {
 
 data class AgentContext(val resources: Set<String>, val memory: Map<String, List<String>>)
 
-class ScopedContextBuilder(private val scopes: ScopeRegistry, private val memory: Map<String, List<String>>) {
+class ScopedContextBuilder(
+    private val scopes: ScopeRegistry,
+    private val memory: Map<String, List<String>>,
+    private val availableTools: Set<String> = emptySet(),
+    private val availableMcps: Set<String> = emptySet(),
+    private val availableSkills: Set<String> = emptySet(),
+) {
     fun build(session: ScopedAgentSession): AgentContext {
         val allowedMemory = memory.filterKeys { scopes.permits(session, ResourceType.MEMORY, it) }
         val resources = buildSet {
-            listOf(ResourceType.TOOL, ResourceType.MCP, ResourceType.SKILL).forEach { addAll(scopes.resourcesFor(session, it)) }
+            if (availableTools.isNotEmpty()) {
+                addAll(availableTools.filter { scopes.permits(session, ResourceType.TOOL, it) })
+            } else {
+                // Backward-compatible fallback for callers that do not yet provide a catalog.
+                addAll(scopes.resourcesFor(session, ResourceType.TOOL))
+            }
         }
         return AgentContext(resources, allowedMemory)
     }
 }
 
 class ScopedToolRouter(private val tools: Map<String, suspend (ToolCall) -> ToolResult<Any>>, private val scopes: ScopeRegistry = ScopeRegistry()) {
+    val availableToolIds: Set<String> get() = tools.keys
+
     suspend fun execute(session: ScopedAgentSession, call: ToolCall): ToolResult<Any> {
         if (!scopes.permits(session, ResourceType.TOOL, call.name)) return ToolResult(false, error = ToolError.SCOPE_DENIED)
         val tool = tools[call.name] ?: return ToolResult(false, error = ToolError.NOT_FOUND)

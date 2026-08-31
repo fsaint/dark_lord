@@ -212,7 +212,11 @@ class DarkLordApplication : Application() {
             events = eventStore,
             audit = auditStore,
             planner = EscalateUntilConfigured,
-            contextBuilder = ScopedContextBuilder(scopes, emptyMap()),
+            contextBuilder = ScopedContextBuilder(
+                scopes = scopes,
+                memory = emptyMap(),
+                availableTools = agentTools.availableToolIds,
+            ),
             tools = agentTools,
             verification = VerificationEngine(),
             replies = replies,
