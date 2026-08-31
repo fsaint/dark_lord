@@ -12,7 +12,7 @@ import com.fsaint.androidagent.policy.ScopedToolRouter
 import com.fsaint.androidagent.runtime.AgentRuntime
 import com.fsaint.androidagent.runtime.AuditStore
 import com.fsaint.androidagent.runtime.EventStore
-import com.fsaint.androidagent.runtime.ModelProvider
+import com.fsaint.androidagent.runtime.LegacyModelProvider
 import com.fsaint.androidagent.runtime.PlannedAction
 import com.fsaint.androidagent.runtime.ReplySender
 import com.fsaint.androidagent.runtime.VerificationEngine
@@ -141,7 +141,7 @@ private class SinglePrincipalDirectory(private val principal: Principal) : Princ
     override suspend fun removeKnown(e164: String): Boolean = false
 }
 
-private class RecordingPlanner : ModelProvider {
+private class RecordingPlanner : LegacyModelProvider {
     var session: ScopedAgentSession? = null
     val sessions = mutableListOf<ScopedAgentSession>()
 

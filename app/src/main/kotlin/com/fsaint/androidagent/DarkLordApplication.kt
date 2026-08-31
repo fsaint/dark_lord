@@ -72,6 +72,7 @@ import com.fsaint.androidagent.runtime.CredentialOutcome
 import com.fsaint.androidagent.runtime.TelegramBotClient
 import com.fsaint.androidagent.runtime.TelegramReplySender
 import com.fsaint.androidagent.telegram.TelegramUpdateService
+import com.fsaint.androidagent.telegram.SharedPreferencesTelegramUpdateCheckpointStore
 import com.fsaint.androidagent.oem.samsungflip3.AgentSurfaceRegistry
 import com.fsaint.androidagent.oem.samsungflip3.AndroidDisplayProvider
 import com.fsaint.androidagent.oem.samsungflip3.DisplayBackedPostureProvider
@@ -143,7 +144,8 @@ class DarkLordApplication : Application() {
         TelegramUpdateService(
             client = telegramClient,
             scope = applicationScope,
-            eventSink = { event, channel -> dispatch(event, channel) },
+            eventSink = { event, channel -> dispatcher.dispatch(event, channel) },
+            checkpointStore = SharedPreferencesTelegramUpdateCheckpointStore(this),
         )
     }
     private val conversationModel by lazy { OpenAiHttpClient(UrlConnectionOpenAiTransport(), openAiCredentials) }
@@ -223,11 +225,8 @@ class DarkLordApplication : Application() {
         AgentSurfaceRegistry.coverContent = { CoverAssistantScreen() }
     }
 
-    override fun onTerminate() {
-        telegramUpdates.close()
-        applicationScope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
-        super.onTerminate()
-    }
+    /** Explicitly stops Telegram polling; useful for controlled teardown and token revocation. */
+    fun stopTelegramUpdates() = telegramUpdates.close()
 
     fun communicationsAccessStatus(): CommunicationsAccessStatus {
         val roleManager = getSystemService(RoleManager::class.java)
