@@ -1,6 +1,7 @@
 package com.fsaint.androidagent
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.app.Notification
 import android.content.Context
 import android.content.Intent
@@ -87,14 +88,61 @@ class LockedFoldedRuntimeAcceptanceTest {
     }
 
     @Test
-    fun smsAndNotificationEventsRemainActivityIndependentForLockedRuntimeAcceptance() {
+    fun notificationActionsStopAndRestartTheForegroundRuntimeService() {
+        grantPostNotificationsIfNeeded()
+        val application = context.applicationContext as DarkLordApplication
+        val notification = AgentRuntimeNotificationFactory(context).build()
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                waitUntil("runtime service did not become foreground before action test") {
+                    runtimeServiceDump().contains("isForeground=true")
+                }
+            }
+
+            notification.action("Stop").actionIntent.send()
+            waitUntil("Stop action did not remove the foreground runtime service") {
+                !runtimeServiceDump().contains("isForeground=true")
+            }
+
+            notification.action("Restart").actionIntent.send()
+            waitUntil("Restart action did not return the runtime service to foreground") {
+                runtimeServiceDump().contains("isForeground=true")
+            }
+        } finally {
+            application.stopBackgroundRuntime()
+        }
+    }
+
+    @Test
+    fun lockedKeyguardAcceptsSmsAndNotificationEventsThroughAndroidEntryPoints() {
+        grantPostNotificationsIfNeeded()
+        val application = context.applicationContext as DarkLordApplication
+        val keyguard = context.getSystemService(KeyguardManager::class.java)
         val smsSink = RecordingSmsSink()
         val notificationSink = RecordingNotificationSink()
 
-        SmsBroadcastReceiver(smsSink).onReceive(context, smsDeliverIntent(PDU_BATTERY))
-        AgentNotificationListenerService(notificationSink).apply {
-            onListenerConnected()
-            onNotificationPosted(notification("com.example.owner", "Owner", "Locked check"))
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                waitUntil("runtime service did not become foreground before lock test") {
+                    runtimeServiceDump().contains("isForeground=true")
+                }
+                shell("input keyevent KEYCODE_SLEEP")
+                waitUntil("device did not enter keyguard lock state", timeoutMillis = 10_000) {
+                    keyguard.isKeyguardLocked
+                }
+                assertTrue("locked entry-path check must execute while keyguard is locked", keyguard.isKeyguardLocked)
+
+                SmsBroadcastReceiver(smsSink).onReceive(context, smsDeliverIntent(PDU_BATTERY))
+                AgentNotificationListenerService(notificationSink).apply {
+                    onListenerConnected()
+                    onNotificationPosted(notification("com.example.owner", "Owner", "Locked check"))
+                }
+            }
+        } finally {
+            shell("input keyevent KEYCODE_WAKEUP")
+            shell("wm dismiss-keyguard")
+            application.stopBackgroundRuntime()
         }
 
         assertEquals(1, smsSink.events.size)
@@ -107,7 +155,7 @@ class LockedFoldedRuntimeAcceptanceTest {
     }
 
     @Test
-    fun telegramPollingUsesPersistedOffsetAfterRelaunchLikeForceStopRecovery() = runBlocking {
+    fun telegramTransportCheckpointRestoresOffsetForRelaunchedPoller() = runBlocking {
         val preferences = context.getSharedPreferences(TELEGRAM_CHECKPOINT_PREFERENCES, Context.MODE_PRIVATE)
         val previousOffset = preferences.takeIf { it.contains(TELEGRAM_OFFSET_KEY) }?.getLong(TELEGRAM_OFFSET_KEY, 0L)
         val checkpoint = SharedPreferencesTelegramUpdateCheckpointStore(context)
@@ -137,6 +185,10 @@ class LockedFoldedRuntimeAcceptanceTest {
             }
         }
     }
+
+    private fun Notification.action(title: String): Notification.Action =
+        actions.firstOrNull { it.title.toString() == title }
+            ?: error("Notification action '$title' was not present")
 
     @Test
     fun secondRuntimeStartDoesNotCreateDuplicateReplyWork() = runBlocking {

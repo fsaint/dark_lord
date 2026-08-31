@@ -4,7 +4,7 @@ Use this checklist on the Samsung Galaxy Z Flip3 running Android 15 after instal
 
 ## Automated acceptance check
 
-Run the connected instrumentation acceptance test:
+Run this connected instrumentation check from an unlocked device. The test starts the foreground runtime, verifies notification controls, then puts the device into keyguard lock for the SMS and notification entry-point check. On a secure-lock device, an operator may need to unlock the phone after the test before running other Compose/UI instrumentation.
 
 ```sh
 ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fsaint.androidagent.LockedFoldedRuntimeAcceptanceTest --no-daemon
@@ -14,9 +14,12 @@ Expected result:
 
 - The foreground service reaches `isForeground=true`.
 - The service notification uses the `agent_runtime` channel, notification id `7101`, and exposes **Stop** and **Restart** actions.
-- SMS and notification-listener events are accepted through their Android entry points while the keyguard is locked.
-- Telegram polling resumes from the persisted update offset after a fresh service instance, matching the force-stop/relaunch recovery boundary.
+- The notification **Stop** and **Restart** actions change the real foreground service state.
+- SMS and notification-listener events are accepted through their Android entry points after the test asserts `KeyguardManager.isKeyguardLocked`.
+- Telegram transport checkpointing resumes from the persisted update offset after a fresh poller instance.
 - A second runtime start does not create duplicate reply work.
+
+This automated check does not physically fold the hinge, send carrier SMS from another phone, send a live owner Telegram message, or perform a real force-stop/relaunch proof. Those are manual device steps below.
 
 ## Manual folded and locked sequence
 
@@ -25,15 +28,17 @@ Expected result:
 3. Set Dark Lord as the SMS app and enable notification access.
 4. Enter the owner OpenAI API key and Telegram bot credentials, then save the owner Telegram chat id.
 5. Open the Android app battery settings for Dark Lord and choose unrestricted battery/background usage. Keep Dark Lord notifications enabled.
-6. Return to Dark Lord and confirm the persistent **Dark Lord background access** notification is visible.
-7. Fold the Flip3 and lock the device.
-8. Send one Telegram message from the owner chat and one SMS from the owner number.
-9. Confirm exactly one reply is delivered for the Telegram message and exactly one reply is delivered for the SMS.
-10. Unlock the device, open Dark Lord diagnostics, and confirm recent runtime/audit evidence is present without exposing message bodies or credentials.
-11. Use the persistent notification's **Stop** action and confirm Telegram polling stops.
-12. Use the app or notification **Restart** path, send one more owner Telegram message, and confirm one reply.
+6. Enable notification access for Dark Lord and choose a test app whose notifications are safe to inspect.
+7. Return to Dark Lord and confirm the persistent **Dark Lord background access** notification is visible.
+8. Fold the Flip3 and lock the device.
+9. Send one Telegram message from the owner chat, one SMS from the owner number, and one visible notification from the chosen test app.
+10. Confirm exactly one reply is delivered for the Telegram message and exactly one reply is delivered for the SMS.
+11. Unlock the device, open Dark Lord diagnostics, and confirm recent Telegram/SMS/notification runtime or audit evidence is present without exposing message bodies or credentials.
+12. Use the persistent notification's **Stop** action and confirm Telegram polling stops.
+13. Use the app or notification **Restart** path, send one more owner Telegram message, and confirm one reply.
+14. Force-stop Dark Lord, relaunch it explicitly, then send one owner Telegram message and confirm polling resumes without duplicate replies.
 
-Record the device model, Android build, app version, battery mode, notification-access state, SMS-role state, and pass/fail evidence for each message.
+Record the device model, Android build, app version, battery mode, notification-access state, SMS-role state, keyguard/folded state, and pass/fail evidence for each message.
 
 ## Hard limits
 

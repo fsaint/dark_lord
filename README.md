@@ -10,7 +10,7 @@ The primary development device is a Samsung Galaxy Z Flip3 on Android 15. The pr
 
 ## Status
 
-The conversational harness and Stage 12 background-runtime acceptance coverage are implemented. Focused unit and connected acceptance smoke tests pass on the SM-F711U1, and a signed release APK has been installed and checksummed. Carrier, external MCP/Tailscale, posture/voice, and some folded/locked operator evidence still require target-hardware notes.
+The conversational harness and Stage 12 background-runtime acceptance coverage are implemented. Focused unit checks pass, while connected folded/locked acceptance needs an unlocked SM-F711U1 for setup and operator evidence for live carrier, Telegram, notification-listener, force-stop, external MCP/Tailscale, posture, and voice flows.
 
 ## Features
 

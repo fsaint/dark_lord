@@ -138,3 +138,72 @@ Output: no whitespace errors.
 - The exact full command `./gradlew testDebugUnitTest connectedDebugAndroidTest --no-daemon` did not complete successfully in this session because the connected Flip remained on a secure keyguard/bouncer after the first locked-state attempt. A human operator needs to unlock the device before the full connected suite can be rerun.
 - The automated acceptance test no longer forces the phone into a physical locked/folded state because that made the shared connected suite non-repeatable. The real folded/locked scenario is covered by the new manual Stage 12 checklist.
 - The connected acceptance test still validates the app-owned event acceptance boundaries, foreground notification state, Telegram checkpoint recovery seam, and duplicate-start guard on `SM-F711U1 - 15`.
+
+## Review fix
+
+Review required the automated acceptance test and documentation to stop overstating what was actually proven, and to restore direct locked-keyguard coverage where the test name claimed it.
+
+### Changes
+
+- Changed `LockedFoldedRuntimeAcceptanceTest.lockedKeyguardAcceptsSmsAndNotificationEventsThroughAndroidEntryPoints` to start the runtime from an unlocked activity, send `KEYCODE_SLEEP`, wait until `KeyguardManager.isKeyguardLocked` is true, assert that lock state, and then invoke/verify SMS and notification-listener entry paths before cleanup.
+- Added `notificationActionsStopAndRestartTheForegroundRuntimeService`, which sends the notification **Stop** and **Restart** `PendingIntent`s and verifies the real service foreground state changes through `dumpsys activity services`.
+- Renamed the Telegram checkpoint test to `telegramTransportCheckpointRestoresOffsetForRelaunchedPoller` so the automated test is explicit about covering the transport checkpoint seam rather than claiming a live force-stop/relaunch proof.
+- Updated Stage 12 documentation to distinguish automated service/action/keyguard/transport checks from manual physical hinge folding, live owner Telegram/SMS delivery, notification-listener evidence from another app, and force-stop/relaunch recovery.
+- Updated README and getting-started wording to avoid claiming a fresh full connected gate while the device remains operator-locked.
+
+### Verification
+
+Android instrumentation compile:
+
+```sh
+./gradlew :app:compileDebugAndroidTestKotlin --no-daemon
+```
+
+Output:
+
+```text
+BUILD SUCCESSFUL in 10s
+191 actionable tasks: 1 executed, 190 up-to-date
+```
+
+Unit suite:
+
+```sh
+./gradlew testDebugUnitTest --no-daemon
+```
+
+Output:
+
+```text
+BUILD SUCCESSFUL in 6s
+269 actionable tasks: 269 up-to-date
+```
+
+Whitespace check:
+
+```sh
+git diff --check
+```
+
+Output: no whitespace errors.
+
+Connected-device blocker check:
+
+```sh
+adb shell dumpsys window | rg -n "mCurrentFocus|mFocusedApp|mAwake|mScreenOn|mDreamingLockscreen|mKeyguard"
+```
+
+Output:
+
+```text
+mCurrentFocus=Window{874c8ba u0 Bouncer}
+mFocusedApp=ActivityRecord{354e72c u0 com.sec.android.app.launcher/.activities.LauncherActivity t582}
+mShowingDream=false mDreamingLockscreen=true
+```
+
+The focused connected test and full `connectedDebugAndroidTest` suite were not rerun after this review fix because the connected Flip is still on a secure keyguard/bouncer and ADB `KEYCODE_WAKEUP`, swipe, and `wm dismiss-keyguard` did not unlock it. A human operator must unlock the device before the focused connected test or full connected suite can run cleanly.
+
+### Remaining concerns
+
+- The corrected locked-keyguard test intentionally locks the device. On secure-lock configurations, cleanup can wake and request keyguard dismissal, but cannot enter the user credential. Running the full connected suite immediately after this test may require operator unlock.
+- The automated Telegram coverage remains a checkpoint/transport relaunch test. Live force-stop/relaunch, owner Telegram delivery, and duplicate reply evidence are manual Stage 12 steps.
