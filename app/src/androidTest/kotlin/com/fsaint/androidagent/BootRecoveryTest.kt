@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.Assert.assertEquals
@@ -29,22 +30,36 @@ class BootRecoveryTest {
     }
 
     @Test
-    fun lockedBootRestoreStartsForegroundServiceInsteadOfCoordinatorDirectly() {
+    fun lockedBootRestoreRestoresDependenciesBeforeStartingForegroundService() = runBlocking {
         val previousCoordinator = BootRecoveryDependencies.coordinator
+        val previousRestorer = BootRecoveryDependencies.restorer
         val previousStarter = BootRecoveryDependencies.foregroundStarter
         val coordinator = RecordingRecoveryCoordinator()
+        val events = mutableListOf<String>()
         val starter = RecordingForegroundStarter()
         BootRecoveryDependencies.coordinator = coordinator
-        BootRecoveryDependencies.foregroundStarter = starter
+        BootRecoveryDependencies.restorer = BackgroundRuntimeRestorer { events += "restore" }
+        BootRecoveryDependencies.foregroundStarter = AgentRuntimeForegroundStarter {
+            starter.start(it)
+            events += "start"
+        }
 
         try {
-            RuntimeRestoreWorker.restoreBackgroundRuntime(context)
+            RuntimeRestoreWorker.restoreBackgroundRuntime(
+                context,
+                startBackgroundRuntime = {
+                    starter.start(context)
+                    events += "start"
+                },
+            )
 
+            assertEquals(listOf("restore", "start"), events)
             assertEquals(1, starter.starts)
             assertEquals(0, coordinator.starts)
             assertEquals(0, coordinator.restores)
         } finally {
             BootRecoveryDependencies.coordinator = previousCoordinator
+            BootRecoveryDependencies.restorer = previousRestorer
             BootRecoveryDependencies.foregroundStarter = previousStarter
         }
     }

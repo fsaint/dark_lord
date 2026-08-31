@@ -14,8 +14,22 @@ class RuntimeRestoreWorker(appContext: Context, params: WorkerParameters) : Coro
         const val UNIQUE_WORK_NAME = "dark-lord-runtime-restore"
         private const val MAX_RETRIES = 3
 
-        internal fun restoreBackgroundRuntime(context: Context) {
-            BootRecoveryDependencies.foregroundStarter.start(context)
+        internal suspend fun restoreBackgroundRuntime(
+            context: Context,
+            restoreDependencies: suspend () -> Unit = { BootRecoveryDependencies.restorer.restore() },
+            startBackgroundRuntime: () -> Unit = {
+                val application = context.applicationContext as? DarkLordApplication
+                if (application != null) {
+                    application.startBackgroundRuntime()
+                } else {
+                    BootRecoveryDependencies.foregroundStarter.start(context)
+                }
+            },
+        ) {
+            restoreDependencies()
+            if (!BootRecoveryDependencies.coordinator.isRunning) {
+                startBackgroundRuntime()
+            }
         }
     }
 }

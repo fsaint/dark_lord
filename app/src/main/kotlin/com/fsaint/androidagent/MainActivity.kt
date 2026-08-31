@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
                     onOpenNotificationListenerSettings = ::openNotificationListenerSettings,
                     onOpenDiagnostics = { diagnosticsOpen = true },
                     onOpenMcpSettings = { mcpSettingsOpen = true },
+                    onOpenBackgroundRuntimeSettings = ::openBackgroundRuntimeSettings,
                     onSaveOpenAiKey = { value ->
                         lifecycleScope.launch {
                             val outcome = (application as DarkLordApplication).saveOpenAiApiKey(value)
@@ -183,6 +184,10 @@ class MainActivity : ComponentActivity() {
 
     fun openNotificationListenerSettings() {
         startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+    }
+
+    fun openBackgroundRuntimeSettings() {
+        startActivity(BackgroundRuntimeSettings.intent(packageManager, packageName))
     }
 
     private fun requestDialerRoleIfNeeded() {

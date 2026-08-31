@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.fsaint.androidagent.BackgroundRuntimeSettingsCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,6 +44,7 @@ fun OpenAssistantScreen(
     onSaveTelegramToken: (String) -> Unit = {},
     onSaveTelegramOwnerChatId: (String) -> Unit = {},
     onOpenMcpSettings: () -> Unit = {},
+    onOpenBackgroundRuntimeSettings: () -> Unit = {},
 ) {
     var apiKey by remember { mutableStateOf("") }
     var telegramToken by remember { mutableStateOf("") }
@@ -112,6 +114,7 @@ fun OpenAssistantScreen(
                 if (onRequestScreenCapture != null) {
                     OutlinedButton(onClick = onRequestScreenCapture, modifier = Modifier.fillMaxWidth()) { Text("Allow one screen capture") }
                 }
+                BackgroundRuntimeSettingsCard(onOpenSettings = onOpenBackgroundRuntimeSettings)
                 Text("Administration", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 4.dp))
                 OutlinedButton(onClick = onOpenPrincipalSettings, modifier = Modifier.fillMaxWidth()) { Text("Communications settings") }
                 OutlinedButton(onClick = onOpenMcpSettings, modifier = Modifier.fillMaxWidth()) { Text("MCP server settings") }

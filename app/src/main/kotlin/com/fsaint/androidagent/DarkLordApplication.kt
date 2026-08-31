@@ -285,6 +285,7 @@ class DarkLordApplication : Application() {
     suspend fun stopTelegramUpdates() = runtimeCoordinator.stop()
 
     fun startBackgroundRuntime() {
+        if (BootRecoveryDependencies.coordinator.isRunning) return
         ContextCompat.startForegroundService(this, AgentRuntimeService.startIntent(this))
     }
 
