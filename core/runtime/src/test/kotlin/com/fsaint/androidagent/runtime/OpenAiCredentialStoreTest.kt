@@ -23,11 +23,13 @@ class OpenAiCredentialStoreTest {
     }
 
     @Test
-    fun rejectsApiKeysContainingHeaderControlCharacters() = runTest {
-        val store = OwnerOnlyOpenAiCredentialStore(FakeSecrets())
+    fun stripsWhitespaceFromPastedApiKeys() = runTest {
+        val secrets = FakeSecrets()
+        val store = OwnerOnlyOpenAiCredentialStore(secrets)
         val owner = Principal("owner", null, PrincipalRole.OWNER)
 
-        assertEquals(CredentialOutcome.DENIED, store.set(owner, "sk-real\r\nmore"))
+        assertEquals(CredentialOutcome.SAVED, store.set(owner, "  sk-real\r\nmore \t"))
+        assertEquals("sk-realmore", secrets.value)
     }
 
     private class FakeSecrets : OpenAiSecretStore {

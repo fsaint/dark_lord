@@ -37,16 +37,15 @@ class OpenAiResponsesProviderTest {
     }
 
     @Test
-    fun rejectsHeaderControlCharactersBeforeTransport() = runTest {
-        var called = false
+    fun stripsWhitespaceBeforeSendingAuthorizationHeader() = runTest {
+        var authorization = ""
         val provider = OpenAiResponsesProvider(OpenAiHttpClient(FakeTransport {
-            called = true
+            authorization = it.authorization
             OpenAiHttpResponse(200, "{\"tool\":\"device.battery\"}")
-        }, StaticApiKey("sk-valid\r\nmalformed")))
+        }, StaticApiKey("  sk-valid\r\nmalformed \t")))
 
-        val result = runCatching { provider.plan(session, event, context) }
-        assertTrue(result.exceptionOrNull() is OpenAiProviderException)
-        assertEquals(false, called)
+        provider.plan(session, event, context)
+        assertEquals("Bearer sk-validmalformed", authorization)
     }
 
     private class FakeTransport(private val responder: (OpenAiHttpRequest) -> OpenAiHttpResponse) : OpenAiHttpTransport {
