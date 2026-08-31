@@ -8,6 +8,16 @@ sealed interface SkillDryRunResult {
 }
 
 class SkillUpdateService(private val installer: SkillInstaller, private val runner: SkillToolRunner) {
+    fun dryRunBytes(archive: ByteArray, expectedSha256: String? = null): SkillDryRunResult {
+        val validation = SkillPackageValidator().validate(archive, expectedSha256)
+        if (validation !is SkillValidationResult.Valid) {
+            val invalid = validation as SkillValidationResult.Invalid
+            return SkillDryRunResult.Rejected(invalid.failure, invalid.detail)
+        }
+        val tests = validation.files.filterKeys { it.startsWith("tests/") || it.startsWith("examples/") }
+        if (tests.any { !runner.run(it.key, it.value) }) return SkillDryRunResult.Rejected(SkillValidationFailure.MALFORMED_MANIFEST, "dry run failed")
+        return SkillDryRunResult.Success(tests.size)
+    }
     fun dryRun(packageData: SkillPackage): SkillDryRunResult {
         val validation = SkillPackageValidator().validate(packageData)
         if (validation !is SkillValidationResult.Valid) {

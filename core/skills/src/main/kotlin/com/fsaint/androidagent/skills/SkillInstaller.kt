@@ -15,12 +15,16 @@ sealed interface SkillInstallResult {
 
 class SkillInstaller(private val store: SkillStore, private val validator: SkillPackageValidator) {
     fun install(packageData: SkillPackage): SkillInstallResult = installValidated(packageData)
+    fun installArchive(archive: ByteArray, expectedSha256: String? = null): SkillInstallResult =
+        installValidated(validator.validate(archive, expectedSha256))
     fun update(packageData: SkillPackage): SkillInstallResult = installValidated(packageData)
 
     fun rollback(skillId: String): Boolean = store.rollbackVersion(skillId) != null
 
-    private fun installValidated(packageData: SkillPackage): SkillInstallResult {
-        val result = validator.validate(packageData)
+    private fun installValidated(packageData: SkillPackage): SkillInstallResult = installValidated(validator.validate(packageData))
+
+    private fun installValidated(validation: SkillValidationResult): SkillInstallResult {
+        val result = validation
         if (result !is SkillValidationResult.Valid) {
             val invalid = result as SkillValidationResult.Invalid
             return SkillInstallResult.Rejected(invalid.failure, invalid.detail)
