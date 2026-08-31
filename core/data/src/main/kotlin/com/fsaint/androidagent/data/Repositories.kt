@@ -33,6 +33,8 @@ class EventRepository(private val dao: EventDao) : EventStore {
         AgentEvent(entity.id, entity.type, entity.source, entity.occurredAtEpochMs, EventPayloadCodec.decode(entity.payload))
     }
 
+    suspend fun contains(eventId: String): Boolean = dao.contains(eventId)
+
     override suspend fun markCompleted(eventId: String) = dao.markCompleted(eventId)
 }
 

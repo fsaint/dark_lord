@@ -159,6 +159,25 @@ class TelegramUpdateServiceTest {
         assertEquals(listOf(41L), checkpoints.savedOffsets)
     }
 
+    @Test
+    fun persistedTelegramEventWithMissingCheckpointIsAcknowledgedWithoutRunningTheAgentAgain() = runTest {
+        val persistedEventIds = setOf("telegram:10")
+        val checkpoint = RecordingCheckpointStore()
+        val client = RecordingTelegramClient(listOf(TelegramUpdate(10, "42", "hello")))
+        var agentRuns = 0
+        val idempotentSink = IdempotentTelegramInboundEventSink(
+            isAlreadyAccepted = { eventId -> eventId in persistedEventIds },
+            delegate = TelegramInboundEventSink { _, _ -> agentRuns++ },
+        )
+        val restartedService = service(client, checkpoint, idempotentSink::accept)
+
+        restartedService.pollOnce()
+
+        assertEquals(listOf<Long?>(null), client.offsets)
+        assertEquals(listOf(11L), checkpoint.savedOffsets)
+        assertEquals(0, agentRuns)
+    }
+
     private fun TestScope.service(
         client: TelegramMessagingClient,
         checkpoints: TelegramUpdateCheckpointStore,

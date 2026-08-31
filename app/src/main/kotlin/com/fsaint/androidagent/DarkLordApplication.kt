@@ -73,6 +73,8 @@ import com.fsaint.androidagent.runtime.TelegramBotClient
 import com.fsaint.androidagent.runtime.TelegramReplySender
 import com.fsaint.androidagent.telegram.TelegramUpdateService
 import com.fsaint.androidagent.telegram.SharedPreferencesTelegramUpdateCheckpointStore
+import com.fsaint.androidagent.telegram.IdempotentTelegramInboundEventSink
+import com.fsaint.androidagent.telegram.TelegramInboundEventSink
 import com.fsaint.androidagent.oem.samsungflip3.AgentSurfaceRegistry
 import com.fsaint.androidagent.oem.samsungflip3.AndroidDisplayProvider
 import com.fsaint.androidagent.oem.samsungflip3.DisplayBackedPostureProvider
@@ -144,7 +146,10 @@ class DarkLordApplication : Application() {
         TelegramUpdateService(
             client = telegramClient,
             scope = applicationScope,
-            eventSink = { event, channel -> dispatcher.dispatch(event, channel) },
+            eventSink = IdempotentTelegramInboundEventSink(
+                isAlreadyAccepted = eventStore::contains,
+                delegate = TelegramInboundEventSink { event, channel -> dispatcher.dispatch(event, channel) },
+            ),
             checkpointStore = SharedPreferencesTelegramUpdateCheckpointStore(this),
         )
     }

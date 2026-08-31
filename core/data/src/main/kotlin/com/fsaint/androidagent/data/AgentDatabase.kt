@@ -40,6 +40,7 @@ import com.fsaint.androidagent.model.VerificationState
 
 @Dao interface EventDao {
     @Insert(onConflict = OnConflictStrategy.ABORT) suspend fun insert(entity: EventEntity)
+    @Query("SELECT EXISTS(SELECT 1 FROM events WHERE id = :id)") suspend fun contains(id: String): Boolean
     @Query("SELECT * FROM events WHERE deliveryState != 'COMPLETED' ORDER BY occurredAtEpochMs LIMIT 1") suspend fun nextUndelivered(): EventEntity?
     @Query("UPDATE events SET deliveryState = 'COMPLETED' WHERE id = :id") suspend fun markCompleted(id: String)
 }

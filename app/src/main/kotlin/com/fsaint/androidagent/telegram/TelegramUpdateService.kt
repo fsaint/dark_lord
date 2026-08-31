@@ -19,6 +19,20 @@ fun interface TelegramInboundEventSink {
     suspend fun accept(event: AgentEvent, channel: String)
 }
 
+/**
+ * Makes inbound acceptance safe after a crash between durable event insertion and offset commit.
+ * A known event has already crossed the durable boundary, so it is acknowledged without invoking
+ * the agent a second time.
+ */
+class IdempotentTelegramInboundEventSink(
+    private val isAlreadyAccepted: suspend (eventId: String) -> Boolean,
+    private val delegate: TelegramInboundEventSink,
+) : TelegramInboundEventSink {
+    override suspend fun accept(event: AgentEvent, channel: String) {
+        if (!isAlreadyAccepted(event.id)) delegate.accept(event, channel)
+    }
+}
+
 /** Persists the next Telegram update offset after successful durable event acceptance. */
 interface TelegramUpdateCheckpointStore {
     suspend fun loadOffset(): Long?
