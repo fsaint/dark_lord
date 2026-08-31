@@ -17,6 +17,27 @@ class LegacyModelProviderAdapter(private val legacy: LegacyModelProvider) : Mode
     }
 }
 interface ReplySender { suspend fun send(channel: String, recipient: String, text: String) }
+
+/** Bounded Telegram messaging boundary used by the Android polling channel and reply sender. */
+interface TelegramMessagingClient {
+    suspend fun sendMessage(chatId: String, text: String): TelegramResult
+    suspend fun getUpdates(offset: Long?, timeoutSeconds: Int): List<TelegramUpdate>
+}
+
+/** Routes only Telegram replies to the originating Telegram chat. */
+class TelegramReplySender(
+    private val client: TelegramMessagingClient,
+) : ReplySender {
+    override suspend fun send(channel: String, recipient: String, text: String) {
+        if (channel.equals(TELEGRAM_CHANNEL, ignoreCase = true) && recipient.isNotBlank() && text.isNotBlank()) {
+            client.sendMessage(recipient, text)
+        }
+    }
+
+    private companion object {
+        const val TELEGRAM_CHANNEL = "TELEGRAM"
+    }
+}
 interface EscalationStore { suspend fun save(escalation: Escalation); suspend fun resolve(id: String, decision: OwnerDecision): Escalation? }
 
 sealed interface PlannedAction { data class Tool(val call: ToolCall) : PlannedAction; data class Escalate(val escalation: Escalation) : PlannedAction }

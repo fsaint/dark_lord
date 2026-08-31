@@ -41,8 +41,8 @@ class TelegramBotClient(
     private val apiBaseUrl: String = "https://api.telegram.org",
     private val timeoutMillis: Long = DEFAULT_TIMEOUT_MILLIS,
     private val maxBodyBytes: Int = MAX_BODY_BYTES,
-) {
-    suspend fun sendMessage(chatId: String, text: String): TelegramResult {
+) : TelegramMessagingClient {
+    override suspend fun sendMessage(chatId: String, text: String): TelegramResult {
         val normalizedBase = normalizedBaseUrl() ?: return TelegramResult.Failure(description = "HTTPS is required")
         if (chatId.isBlank() || chatId.length > MAX_CHAT_ID_LENGTH || text.isEmpty() || text.length > MAX_TEXT_LENGTH) {
             return TelegramResult.Failure(description = "Telegram payload exceeds limits")
@@ -52,7 +52,7 @@ class TelegramBotClient(
             .toSendResult()
     }
 
-    suspend fun getUpdates(offset: Long?, timeoutSeconds: Int): List<TelegramUpdate> {
+    override suspend fun getUpdates(offset: Long?, timeoutSeconds: Int): List<TelegramUpdate> {
         val normalizedBase = normalizedBaseUrl() ?: return emptyList()
         val normalizedTimeout = timeoutSeconds.coerceIn(0, MAX_POLL_SECONDS)
         val body = buildString {

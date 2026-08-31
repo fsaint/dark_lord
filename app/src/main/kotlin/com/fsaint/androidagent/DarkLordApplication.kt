@@ -69,6 +69,9 @@ import com.fsaint.androidagent.runtime.OpenAiHttpClient
 import com.fsaint.androidagent.runtime.OwnerOnlyOpenAiCredentialStore
 import com.fsaint.androidagent.runtime.OwnerOnlyTelegramBotCredentialStore
 import com.fsaint.androidagent.runtime.CredentialOutcome
+import com.fsaint.androidagent.runtime.TelegramBotClient
+import com.fsaint.androidagent.runtime.TelegramReplySender
+import com.fsaint.androidagent.telegram.TelegramUpdateService
 import com.fsaint.androidagent.oem.samsungflip3.AgentSurfaceRegistry
 import com.fsaint.androidagent.oem.samsungflip3.AndroidDisplayProvider
 import com.fsaint.androidagent.oem.samsungflip3.DisplayBackedPostureProvider
@@ -134,6 +137,15 @@ class DarkLordApplication : Application() {
     }
     private val openAiCredentials by lazy { OwnerOnlyOpenAiCredentialStore(AndroidOpenAiSecretStore(this)) }
     val telegramBotCredentials by lazy { OwnerOnlyTelegramBotCredentialStore(AndroidTelegramBotSecretStore(this)) }
+    private val telegramClient by lazy { TelegramBotClient(UrlConnectionTelegramTransport(), telegramBotCredentials) }
+    private val telegramReplies by lazy { TelegramReplySender(telegramClient) }
+    private val telegramUpdates by lazy {
+        TelegramUpdateService(
+            client = telegramClient,
+            scope = applicationScope,
+            eventSink = { event, channel -> dispatch(event, channel) },
+        )
+    }
     private val conversationModel by lazy { OpenAiHttpClient(UrlConnectionOpenAiTransport(), openAiCredentials) }
     private val conversationHarness by lazy {
         ConversationHarness(conversationModel, agentTools, RoomConversationCheckpointStore(DurableStateRepository(database.durableStateDao())))
@@ -146,8 +158,11 @@ class DarkLordApplication : Application() {
     private val replies by lazy {
         object : com.fsaint.androidagent.runtime.ReplySender {
             override suspend fun send(channel: String, recipient: String, text: String) {
-                if (channel == "VOICE") textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, "dark-lord-response")
-                else smsCapability.replySender.send(recipient, text)
+                when (channel) {
+                    "VOICE" -> textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, "dark-lord-response")
+                    "TELEGRAM" -> telegramReplies.send(channel, recipient, text)
+                    else -> smsCapability.replySender.send(recipient, text)
+                }
             }
         }
     }
@@ -175,6 +190,7 @@ class DarkLordApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        telegramUpdates.start()
         SmsBroadcastReceiverDependencies.configure(object : SmsEventSink {
             override fun publish(event: AgentEvent) = smsCapability.publish(event)
         })
@@ -205,6 +221,12 @@ class DarkLordApplication : Application() {
             )
         }
         AgentSurfaceRegistry.coverContent = { CoverAssistantScreen() }
+    }
+
+    override fun onTerminate() {
+        telegramUpdates.close()
+        applicationScope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        super.onTerminate()
     }
 
     fun communicationsAccessStatus(): CommunicationsAccessStatus {
