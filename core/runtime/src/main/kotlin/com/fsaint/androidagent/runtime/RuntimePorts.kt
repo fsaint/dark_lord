@@ -24,13 +24,21 @@ interface TelegramMessagingClient {
     suspend fun getUpdates(offset: Long?, timeoutSeconds: Int): List<TelegramUpdate>
 }
 
+/** A failed Bot API send must reach the runtime so the inbound event stays retryable. */
+class TelegramReplyException(errorCode: Int?) : IllegalStateException(
+    "Telegram reply delivery failed${errorCode?.let { " (HTTP $it)" }.orEmpty()}",
+)
+
 /** Routes only Telegram replies to the originating Telegram chat. */
 class TelegramReplySender(
     private val client: TelegramMessagingClient,
 ) : ReplySender {
     override suspend fun send(channel: String, recipient: String, text: String) {
         if (channel.equals(TELEGRAM_CHANNEL, ignoreCase = true) && recipient.isNotBlank() && text.isNotBlank()) {
-            client.sendMessage(recipient, text)
+            when (val result = client.sendMessage(recipient, text)) {
+                is TelegramResult.Success -> Unit
+                is TelegramResult.Failure -> throw TelegramReplyException(result.errorCode)
+            }
         }
     }
 

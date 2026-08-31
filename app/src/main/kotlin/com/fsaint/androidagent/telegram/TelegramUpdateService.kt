@@ -2,6 +2,7 @@ package com.fsaint.androidagent.telegram
 
 import android.content.Context
 import com.fsaint.androidagent.model.AgentEvent
+import com.fsaint.androidagent.model.DeliveryState
 import com.fsaint.androidagent.runtime.TelegramMessagingClient
 import com.fsaint.androidagent.runtime.TelegramUpdate
 import kotlinx.coroutines.CancellationException
@@ -25,11 +26,11 @@ fun interface TelegramInboundEventSink {
  * the agent a second time.
  */
 class IdempotentTelegramInboundEventSink(
-    private val isAlreadyAccepted: suspend (eventId: String) -> Boolean,
+    private val eventState: suspend (eventId: String) -> DeliveryState?,
     private val delegate: TelegramInboundEventSink,
 ) : TelegramInboundEventSink {
     override suspend fun accept(event: AgentEvent, channel: String) {
-        if (!isAlreadyAccepted(event.id)) delegate.accept(event, channel)
+        if (eventState(event.id) != DeliveryState.COMPLETED) delegate.accept(event, channel)
     }
 }
 

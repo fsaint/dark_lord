@@ -147,7 +147,7 @@ class DarkLordApplication : Application() {
             client = telegramClient,
             scope = applicationScope,
             eventSink = IdempotentTelegramInboundEventSink(
-                isAlreadyAccepted = eventStore::contains,
+                eventState = eventStore::deliveryState,
                 delegate = TelegramInboundEventSink { event, channel -> dispatcher.dispatch(event, channel) },
             ),
             checkpointStore = SharedPreferencesTelegramUpdateCheckpointStore(this),

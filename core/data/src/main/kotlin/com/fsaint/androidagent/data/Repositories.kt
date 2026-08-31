@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets
 
 class EventRepository(private val dao: EventDao) : EventStore {
     override suspend fun enqueue(event: AgentEvent) {
+        if (dao.deliveryState(event.id) != null) return
         dao.insert(
             EventEntity(
                 id = event.id,
@@ -34,6 +35,7 @@ class EventRepository(private val dao: EventDao) : EventStore {
     }
 
     suspend fun contains(eventId: String): Boolean = dao.contains(eventId)
+    suspend fun deliveryState(eventId: String): DeliveryState? = dao.deliveryState(eventId)?.let(DeliveryState::valueOf)
 
     override suspend fun markCompleted(eventId: String) = dao.markCompleted(eventId)
 }

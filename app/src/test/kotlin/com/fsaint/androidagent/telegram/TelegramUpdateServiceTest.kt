@@ -1,7 +1,9 @@
 package com.fsaint.androidagent.telegram
 
 import com.fsaint.androidagent.model.AgentEvent
+import com.fsaint.androidagent.model.DeliveryState
 import com.fsaint.androidagent.runtime.TelegramMessagingClient
+import com.fsaint.androidagent.runtime.TelegramReplyException
 import com.fsaint.androidagent.runtime.TelegramReplySender
 import com.fsaint.androidagent.runtime.TelegramResult
 import com.fsaint.androidagent.runtime.TelegramUpdate
@@ -160,13 +162,13 @@ class TelegramUpdateServiceTest {
     }
 
     @Test
-    fun persistedTelegramEventWithMissingCheckpointIsAcknowledgedWithoutRunningTheAgentAgain() = runTest {
-        val persistedEventIds = setOf("telegram:10")
+    fun completedTelegramEventWithMissingCheckpointIsAcknowledgedWithoutRunningTheAgentAgain() = runTest {
+        val eventStates = mapOf("telegram:10" to DeliveryState.COMPLETED)
         val checkpoint = RecordingCheckpointStore()
         val client = RecordingTelegramClient(listOf(TelegramUpdate(10, "42", "hello")))
         var agentRuns = 0
         val idempotentSink = IdempotentTelegramInboundEventSink(
-            isAlreadyAccepted = { eventId -> eventId in persistedEventIds },
+            eventState = { eventId -> eventStates[eventId] },
             delegate = TelegramInboundEventSink { _, _ -> agentRuns++ },
         )
         val restartedService = service(client, checkpoint, idempotentSink::accept)
@@ -176,6 +178,41 @@ class TelegramUpdateServiceTest {
         assertEquals(listOf<Long?>(null), client.offsets)
         assertEquals(listOf(11L), checkpoint.savedOffsets)
         assertEquals(0, agentRuns)
+    }
+
+    @Test
+    fun pendingTelegramEventWithStaleCheckpointIsResumedBeforeItsOffsetIsAcknowledged() = runTest {
+        val eventStates = mapOf("telegram:10" to DeliveryState.PENDING)
+        val checkpoint = RecordingCheckpointStore()
+        val client = RecordingTelegramClient(listOf(TelegramUpdate(10, "42", "hello")))
+        var agentRuns = 0
+        val idempotentSink = IdempotentTelegramInboundEventSink(
+            eventState = { eventId -> eventStates[eventId] },
+            delegate = TelegramInboundEventSink { _, _ -> agentRuns++ },
+        )
+        val restartedService = service(client, checkpoint, idempotentSink::accept)
+
+        restartedService.pollOnce()
+
+        assertEquals(listOf(11L), checkpoint.savedOffsets)
+        assertEquals(1, agentRuns)
+    }
+
+    @Test
+    fun replyFailureLeavesTelegramEventUnacknowledgedUntilTheReplyCanBeSent() = runTest {
+        val client = RecordingTelegramClient(listOf(TelegramUpdate(10, "42", "hello")))
+        client.sendResult = TelegramResult.Failure(503, "unavailable")
+        val checkpoint = RecordingCheckpointStore()
+        val sender = TelegramReplySender(client)
+        val service = service(client, checkpoint) { _, _ -> sender.send("TELEGRAM", "42", "reply") }
+
+        kotlin.test.assertFailsWith<TelegramReplyException> { service.pollOnce() }
+        client.sendResult = TelegramResult.Success()
+        service.pollOnce()
+
+        assertEquals(listOf<Long?>(null, null), client.offsets)
+        assertEquals(listOf(11L), checkpoint.savedOffsets)
+        assertEquals(listOf("42" to "reply"), client.sent)
     }
 
     private fun TestScope.service(
@@ -195,14 +232,15 @@ class TelegramUpdateServiceTest {
     ) : TelegramMessagingClient {
         val offsets = mutableListOf<Long?>()
         val sent = mutableListOf<Pair<String, String>>()
+        var sendResult: TelegramResult = TelegramResult.Success()
         override suspend fun getUpdates(offset: Long?, timeoutSeconds: Int): List<TelegramUpdate> {
             offsets += offset
             return updates
         }
 
         override suspend fun sendMessage(chatId: String, text: String): TelegramResult {
-            sent += chatId to text
-            return TelegramResult.Success()
+            if (sendResult is TelegramResult.Success) sent += chatId to text
+            return sendResult
         }
     }
 
