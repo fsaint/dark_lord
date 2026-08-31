@@ -66,6 +66,16 @@ class PrototypeAcceptanceTest {
         compose.onNodeWithText("Read-only local health snapshot. Sensitive values are redacted.").assertIsDisplayed()
     }
 
+    @Test fun ownerSetupAppearsBeforeCredentialSetup() {
+        compose.setContent {
+            OpenAssistantScreen(onRequestAssistantRole = {}, onRequestCapabilityPermissions = {})
+        }
+
+        compose.onNodeWithText("Owner setup").assertIsDisplayed()
+        compose.onNodeWithText("Set owner and communications").assertIsDisplayed()
+        compose.onNodeWithText("Model connection").assertIsDisplayed()
+    }
+
     @Test fun ungrantedPrincipalCannotCallScopedTool() = runBlocking {
         val scopes = ScopeRegistry()
         val session = ScopedAgentSession("s", "known", PrincipalRole.KNOWN, "known", "test", "known", 0)

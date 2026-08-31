@@ -64,6 +64,15 @@ fun OpenAssistantScreen(
                 Text("Invoke Dark Lord from the Side button, SMS, or voice. Actions stay inside the permissions you grant.", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Owner setup", style = MaterialTheme.typography.titleLarge)
+                        Text("Start here: designate yourself as the owner before adding keys or using communications features.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedButton(onClick = onOpenPrincipalSettings, modifier = Modifier.fillMaxWidth()) {
+                            Text("Set owner and communications")
+                        }
+                    }
+                }
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Model connection", style = MaterialTheme.typography.titleLarge)
                         Text("Set up an owner-only OpenAI key. It is encrypted locally and never included in diagnostics or messages.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         OutlinedTextField(
@@ -119,8 +128,6 @@ fun OpenAssistantScreen(
                     onOpenSettings = onOpenBackgroundRuntimeSettings,
                     onOpenNotificationSettings = onOpenRuntimeNotificationSettings,
                 )
-                Text("Administration", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 4.dp))
-                OutlinedButton(onClick = onOpenPrincipalSettings, modifier = Modifier.fillMaxWidth()) { Text("Communications settings") }
                 OutlinedButton(onClick = onOpenMcpSettings, modifier = Modifier.fillMaxWidth()) { Text("MCP server settings") }
                 OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors()) { Text("Diagnostics") }
             }
