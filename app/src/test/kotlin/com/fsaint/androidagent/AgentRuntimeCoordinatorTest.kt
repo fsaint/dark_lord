@@ -46,25 +46,25 @@ class AgentRuntimeCoordinatorTest {
 
     @Test
     fun startDuringStopDoesNotCreateOverlappingPollingJob() = runTest {
-        val updates = FakeUpdates(blockStop = true)
+        val updates = FakeUpdates(leavePollingJobRunning = true)
         val coordinator = AgentRuntimeCoordinator(updates)
         coordinator.start()
 
         val stopping = async { coordinator.stop() }
         updates.stopEntered.await()
+        // Telegram stop has returned, but coordinator.stop() is still waiting for the polling job.
         coordinator.start()
         assertEquals(1, updates.starts)
 
-        updates.allowStop.complete(Unit)
+        updates.completePolling()
         stopping.await()
     }
 
-    private class FakeUpdates(private val blockStop: Boolean = false) : TelegramUpdatesLifecyclePort {
+    private class FakeUpdates(private val leavePollingJobRunning: Boolean = false) : TelegramUpdatesLifecyclePort {
         var starts = 0
         var stops = 0
         private var pollingJob: CompletableJob? = null
         val stopEntered = CompletableDeferred<Unit>()
-        val allowStop = CompletableDeferred<Unit>()
 
         override fun start(): Job {
             starts += 1
@@ -73,11 +73,13 @@ class AgentRuntimeCoordinatorTest {
 
         override suspend fun stop() {
             stops += 1
-            if (blockStop) {
+            if (leavePollingJobRunning) {
                 stopEntered.complete(Unit)
-                allowStop.await()
+            } else {
+                pollingJob?.complete()
             }
-            pollingJob?.complete()
         }
+
+        fun completePolling() { pollingJob?.complete() }
     }
 }
