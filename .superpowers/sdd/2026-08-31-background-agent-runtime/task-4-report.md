@@ -230,3 +230,10 @@ git diff --check
 ```
 
 Results are recorded in the follow-up commit handoff.
+
+## Plan/spec artifact commit
+
+Added the background-runtime implementation plan and specification artifacts to version control without content changes:
+
+- `docs/superpowers/plans/2026-08-31-background-agent-runtime.md`
+- `docs/superpowers/specs/2026-08-31-background-agent-runtime.md`
