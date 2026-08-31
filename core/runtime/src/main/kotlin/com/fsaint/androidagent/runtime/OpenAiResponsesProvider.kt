@@ -38,7 +38,9 @@ class OpenAiHttpClient(
         if (!endpoint.startsWith("https://") || timeoutMillis !in 1..120_000) throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR)
         if (body.toByteArray().size > maxBodyBytes) throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR)
         val key = runCatching { keyProvider.apiKey() }.getOrElse { throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED) }
-        if (key.isBlank() || key.length > 512) throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED)
+        if (key.isBlank() || key.length > 512 || key.any { it.code < 0x20 || it.code == 0x7f }) {
+            throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED, "invalid API key")
+        }
         val response = runCatching { transport.execute(OpenAiHttpRequest(endpoint, "Bearer $key", body, timeoutMillis)) }
             .getOrElse {
                 val detail = listOfNotNull(it::class.simpleName, it.message?.take(160)).joinToString(": ")
@@ -85,8 +87,11 @@ interface OpenAiSecretStore { suspend fun read(): String?; suspend fun write(val
 class OwnerOnlyOpenAiCredentialStore(private val secrets: OpenAiSecretStore) : OpenAiApiKeyProvider {
     override suspend fun apiKey(): String = secrets.read() ?: throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.PERMISSION_REQUIRED)
     suspend fun set(principal: Principal, value: String): CredentialOutcome {
-        if (principal.role != PrincipalRole.OWNER || !value.trim().startsWith("sk-") || value.length > 512) return CredentialOutcome.DENIED
-        return runCatching { secrets.write(value.trim()); CredentialOutcome.SAVED }.getOrElse { CredentialOutcome.FAILED }
+        val normalized = value.trim()
+        if (principal.role != PrincipalRole.OWNER || !normalized.startsWith("sk-") || normalized.length > 512 || normalized.any { it.code < 0x20 || it.code == 0x7f }) {
+            return CredentialOutcome.DENIED
+        }
+        return runCatching { secrets.write(normalized); CredentialOutcome.SAVED }.getOrElse { CredentialOutcome.FAILED }
     }
     suspend fun get(principal: Principal): String? = if (principal.role == PrincipalRole.OWNER) secrets.read() else null
     suspend fun clear(principal: Principal): CredentialOutcome = if (principal.role != PrincipalRole.OWNER) CredentialOutcome.DENIED else runCatching { secrets.clear(); CredentialOutcome.SAVED }.getOrElse { CredentialOutcome.FAILED }

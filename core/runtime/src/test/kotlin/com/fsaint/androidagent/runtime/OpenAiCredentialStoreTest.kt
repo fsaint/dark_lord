@@ -22,6 +22,14 @@ class OpenAiCredentialStoreTest {
         assertEquals("sk-real", secrets.value)
     }
 
+    @Test
+    fun rejectsApiKeysContainingHeaderControlCharacters() = runTest {
+        val store = OwnerOnlyOpenAiCredentialStore(FakeSecrets())
+        val owner = Principal("owner", null, PrincipalRole.OWNER)
+
+        assertEquals(CredentialOutcome.DENIED, store.set(owner, "sk-real\r\nmore"))
+    }
+
     private class FakeSecrets : OpenAiSecretStore {
         var value: String? = null
         override suspend fun read(): String? = value

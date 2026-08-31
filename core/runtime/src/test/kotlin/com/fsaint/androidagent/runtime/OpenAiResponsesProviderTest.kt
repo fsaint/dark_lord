@@ -36,6 +36,19 @@ class OpenAiResponsesProviderTest {
         assertTrue(result.exceptionOrNull()?.message?.contains("sk-secret") != true)
     }
 
+    @Test
+    fun rejectsHeaderControlCharactersBeforeTransport() = runTest {
+        var called = false
+        val provider = OpenAiResponsesProvider(OpenAiHttpClient(FakeTransport {
+            called = true
+            OpenAiHttpResponse(200, "{\"tool\":\"device.battery\"}")
+        }, StaticApiKey("sk-valid\r\nmalformed")))
+
+        val result = runCatching { provider.plan(session, event, context) }
+        assertTrue(result.exceptionOrNull() is OpenAiProviderException)
+        assertEquals(false, called)
+    }
+
     private class FakeTransport(private val responder: (OpenAiHttpRequest) -> OpenAiHttpResponse) : OpenAiHttpTransport {
         override suspend fun execute(request: OpenAiHttpRequest): OpenAiHttpResponse = responder(request)
     }
