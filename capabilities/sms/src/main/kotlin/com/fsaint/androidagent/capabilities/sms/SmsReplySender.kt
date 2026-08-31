@@ -133,6 +133,7 @@ private class TransportResultReceivers(
 
     private val sentReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
+            android.util.Log.i("DarkLordSms", "reply sent resultCode=$resultCode")
             publish("sms.sent", if (resultCode == Activity.RESULT_OK) VerificationState.UNVERIFIED else VerificationState.FAILED, resultCode)
             unregisterSent()
             if (resultCode != Activity.RESULT_OK) unregisterDelivered()
