@@ -29,6 +29,7 @@ For the signed prototype artifact, use `./gradlew :app:assembleRelease` and foll
 4. Open **Communications settings**, provision your owner number, and grant SMS/dialer roles as needed.
 5. Enable notification access for Dark Lord.
 6. Return to the main screen and enter the OpenAI key in **OpenAI API key (owner only)**, then tap **Save model key**. The key is encrypted with Android Keystore and is not sent through SMS or diagnostics.
+7. For reliable Telegram polling while the Flip is folded or locked, open the Android battery settings for Dark Lord, choose unrestricted battery/background usage, and keep the persistent runtime notification enabled.
 
 Detailed reset and Device Owner procedures are in the [device provisioning guide](device-provisioning/galaxy-z-flip3-reset-and-device-owner.md).
 
@@ -52,10 +53,13 @@ Dark Lord's inbound MCP server is currently a scoped protocol foundation (`Tails
 
 Use the [Stage 11 conversational harness checklist](device-test/stage-11-conversational-harness.md) for the complete smoke test. The [acceptance checklist](acceptance/flip3-prototype-checklist.md) tracks the broader device evidence still required.
 
+Use the [Stage 12 background runtime checklist](device-test/stage-12-background-runtime.md) when validating folded and locked operation. The persistent foreground service keeps Telegram polling and queued work visible, but Android and Samsung policy can still delay or stop work under Doze, low battery, thermal pressure, network loss, standby restrictions, or explicit force-stop. UI actions may require unlock, and browser, microphone, camera, and screen capture tools run only after an explicit user action rather than as continuous background operations.
+
 ## Useful verification commands
 
 ```sh
 ./gradlew test lintDebug :app:assembleRelease
+./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fsaint.androidagent.LockedFoldedRuntimeAcceptanceTest --no-daemon
 ./gradlew :app:releaseSha256
 adb shell pidof com.fsaint.androidagent
 ```

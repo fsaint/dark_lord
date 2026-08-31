@@ -10,7 +10,7 @@ The primary development device is a Samsung Galaxy Z Flip3 on Android 15. The pr
 
 ## Status
 
-The conversational harness and Stage 11 integration are implemented. The full Gradle gate passes, connected acceptance smoke tests pass on the SM-F711U1, and a signed release APK has been installed and checksummed. Carrier, external MCP/Tailscale, posture/voice, and permission flows still require operator evidence on target hardware.
+The conversational harness and Stage 12 background-runtime acceptance coverage are implemented. Focused unit and connected acceptance smoke tests pass on the SM-F711U1, and a signed release APK has been installed and checksummed. Carrier, external MCP/Tailscale, posture/voice, and some folded/locked operator evidence still require target-hardware notes.
 
 ## Features
 
@@ -22,6 +22,7 @@ The conversational harness and Stage 11 integration are implemented. The full Gr
 - Device tools for battery/status, installed apps, camera, microphone, audio, radios, location and environment, sensors, NFC, USB, contacts, private files, and screen capture.
 - Scoped authorization by owner, known principal, and unknown principal, with scope-denied responses and escalation support.
 - Owner provisioning, principal management, capability permission flows, Device Owner support, reboot recovery, scheduling, audit records, and bounded diagnostics.
+- Visible foreground runtime service for Telegram polling and queued work, with persistent Stop/Restart notification actions and boot/process recovery where Android permits it.
 - OpenAI Responses API conversational harness with model-selected tools, an eight-turn safety budget, one final SMS/voice response, and resumable Room-backed checkpoints.
 - Owner-only OpenAI API-key setup stored in Android Keystore; credentials are excluded from diagnostics, messages, and audit output.
 - MCP connection foundations with scoped discovery, OAuth metadata, Streamable HTTP seams, private Tailscale server support, and network failure handling.
@@ -41,6 +42,7 @@ The conversational harness and Stage 11 integration are implemented. The full Gr
 - [Stage 7 capability device acceptance checklist](docs/device-test/stage-7-capabilities.md)
 - [Stage 8 MCP and skills operations checklist](docs/device-test/stage-8-mcp-skills.md)
 - [Stage 9 recovery and diagnostics device checklist](docs/device-test/stage-9-recovery-diagnostics.md)
+- [Stage 12 folded and locked background runtime checklist](docs/device-test/stage-12-background-runtime.md)
 - [Flip3 prototype acceptance checklist](docs/acceptance/flip3-prototype-checklist.md)
 - [Prototype sideloading guide](docs/release/sideloading.md)
 
