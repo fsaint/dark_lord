@@ -27,4 +27,52 @@ class BootRecoveryTest {
         BootReceiver().onReceive(context, Intent(Intent.ACTION_TIME_CHANGED))
         assertEquals("dark-lord-runtime-restore", RuntimeRestoreWorker.UNIQUE_WORK_NAME)
     }
+
+    @Test
+    fun lockedBootRestoreStartsForegroundServiceInsteadOfCoordinatorDirectly() {
+        val previousCoordinator = BootRecoveryDependencies.coordinator
+        val previousStarter = BootRecoveryDependencies.foregroundStarter
+        val coordinator = RecordingRecoveryCoordinator()
+        val starter = RecordingForegroundStarter()
+        BootRecoveryDependencies.coordinator = coordinator
+        BootRecoveryDependencies.foregroundStarter = starter
+
+        try {
+            RuntimeRestoreWorker.restoreBackgroundRuntime(context)
+
+            assertEquals(1, starter.starts)
+            assertEquals(0, coordinator.starts)
+            assertEquals(0, coordinator.restores)
+        } finally {
+            BootRecoveryDependencies.coordinator = previousCoordinator
+            BootRecoveryDependencies.foregroundStarter = previousStarter
+        }
+    }
+}
+
+private class RecordingForegroundStarter : AgentRuntimeForegroundStarter {
+    var starts = 0
+
+    override fun start(context: Context) {
+        starts += 1
+    }
+}
+
+private class RecordingRecoveryCoordinator : AgentRuntimeRecovery {
+    var starts = 0
+    var stops = 0
+    var restores = 0
+    override val isRunning = false
+
+    override fun start() {
+        starts += 1
+    }
+
+    override suspend fun stop() {
+        stops += 1
+    }
+
+    override suspend fun restore() {
+        restores += 1
+    }
 }

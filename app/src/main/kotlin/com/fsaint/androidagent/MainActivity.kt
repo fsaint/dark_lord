@@ -1,8 +1,9 @@
 package com.fsaint.androidagent
 
-import android.app.role.RoleManager
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -38,7 +39,19 @@ class MainActivity : ComponentActivity() {
 
     private val requestCapabilityPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
-    ) { }
+    ) { startBackgroundRuntimeWhenPermitted() }
+
+    private val requestRuntimeNotificationPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        runtimeNotificationPermissionRequestInFlight = false
+        if (granted) {
+            (application as DarkLordApplication).startBackgroundRuntime()
+        }
+    }
+
+    private var runtimeNotificationPermissionRequestInFlight = false
+    private var runtimeNotificationPermissionRequested = false
 
     private val requestSmsRole = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -116,7 +129,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        (application as DarkLordApplication).startBackgroundRuntime()
+        startBackgroundRuntimeWhenPermitted()
     }
 
     private fun requestAssistantRole() {
@@ -128,15 +141,15 @@ class MainActivity : ComponentActivity() {
 
     private fun requestCapabilityPermissions() {
         val permissions = mutableListOf(
-                Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.CAMERA,
-                Manifest.permission.READ_SMS,
-                Manifest.permission.RECEIVE_SMS,
-                Manifest.permission.SEND_SMS,
-                Manifest.permission.READ_PHONE_STATE,
-                Manifest.permission.READ_CALL_LOG,
-                Manifest.permission.CALL_PHONE,
-            )
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA,
+            Manifest.permission.READ_SMS,
+            Manifest.permission.RECEIVE_SMS,
+            Manifest.permission.SEND_SMS,
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.CALL_PHONE,
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions += Manifest.permission.POST_NOTIFICATIONS
         }
@@ -145,6 +158,18 @@ class MainActivity : ComponentActivity() {
 
     private fun requestScreenCapture() {
         requestScreenCapture.launch((application as DarkLordApplication).createScreenCaptureConsentIntent())
+    }
+
+    private fun startBackgroundRuntimeWhenPermitted() {
+        val notificationPermissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (shouldStartBackgroundRuntimeWithNotificationPermission(Build.VERSION.SDK_INT, notificationPermissionGranted)) {
+            (application as DarkLordApplication).startBackgroundRuntime()
+        } else if (!runtimeNotificationPermissionRequestInFlight && !runtimeNotificationPermissionRequested) {
+            runtimeNotificationPermissionRequestInFlight = true
+            runtimeNotificationPermissionRequested = true
+            requestRuntimeNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     fun requestCommunicationsRoles() {
@@ -169,6 +194,11 @@ class MainActivity : ComponentActivity() {
 
     private fun communicationsAccessStatus() = (application as DarkLordApplication).communicationsAccessStatus()
 }
+
+internal fun shouldStartBackgroundRuntimeWithNotificationPermission(
+    sdkInt: Int,
+    permissionGranted: Boolean,
+): Boolean = sdkInt < Build.VERSION_CODES.TIRAMISU || permissionGranted
 
 @Composable
 private fun PrincipalSettingsRoute(

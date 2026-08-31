@@ -134,3 +134,86 @@ The smoke check verified the actual `ContextCompat.startForegroundService()` pat
 - The exact requested Gradle command with `--tests` is not valid for `connectedDebugAndroidTest` in this project. The equivalent class filter used here is `-Pandroid.testInstrumentationRunnerArguments.class=com.fsaint.androidagent.AgentRuntimeServiceTest`.
 - `MainActivity` was modified even though it was not listed in the Task 2 file list, because unconditional foreground-service start from `DarkLordApplication.onCreate()` crashed under a background/test process state. Starting from `MainActivity.onStart()` keeps the owner API on the application while using an allowed foreground app state.
 - Task 3 should continue boot/process recovery work carefully: API 35 foreground-service background-start restrictions still apply, and recovery should not assume a foreground activity is available.
+
+## Review Fixes
+
+Implemented the required follow-up fixes from Task 2 review:
+
+- Changed boot/device-locked restore so `RuntimeRestoreWorker` calls `BootRecoveryDependencies.foregroundStarter.start(context)` instead of `BootRecoveryDependencies.coordinator.restore()`. The default starter uses `ContextCompat.startForegroundService(context, AgentRuntimeService.startIntent(context))`; the foreground service then invokes `AgentRuntimeCoordinator.start()`. This preserves WorkManager retry/failure behavior around the service-start attempt and keeps runtime restoration behind the visible foreground service notification.
+- Added a locked-boot regression test proving restore starts the foreground service path and does not call coordinator `start()`/`restore()` directly.
+- Gated `MainActivity.onStart()` runtime startup behind `POST_NOTIFICATIONS` on Android 13+ and request that permission before starting the service when it has not been granted. Pre-Android-13 behavior remains immediate startup.
+- Added permission-gate tests and a real `MainActivity` launch regression that grants notifications, launches the activity, and verifies via `dumpsys activity services` that the actual `AgentRuntimeService` reached `isForeground=true` with channel `agent_runtime`.
+- Changed `ACTION_STOP` handling to return `Service.START_NOT_STICKY` while it stops the coordinator/service asynchronously, avoiding a null-intent sticky restart after an explicit stop.
+
+An intermediate review-fix test run failed before the real-launch test was corrected:
+
+```bash
+./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fsaint.androidagent.AgentRuntimeServiceTest,com.fsaint.androidagent.BootRecoveryTest --no-daemon
+```
+
+Relevant output:
+
+```text
+Starting 12 tests on SM-F711U1 - 15
+
+com.fsaint.androidagent.AgentRuntimeServiceTest > foregroundActivityLaunchStartsRealRuntimeServiceWhenNotificationsAllowed[SM-F711U1 - 15] FAILED
+    java.lang.AssertionError: Condition was not met before timeout
+
+Finished 12 tests on SM-F711U1 - 15
+BUILD FAILED
+```
+
+Root cause: the test asserted against an injected fake coordinator, but real `DarkLordApplication.onCreate()` overwrites `BootRecoveryDependencies.coordinator` with the production coordinator before the activity/service path runs. I changed the regression to assert the actual service foreground state instead of an overwritten fake.
+
+Final review-fix verification:
+
+```bash
+./gradlew :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin --no-daemon
+```
+
+Output:
+
+```text
+BUILD SUCCESSFUL in 11s
+191 actionable tasks: 3 executed, 188 up-to-date
+```
+
+```bash
+./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fsaint.androidagent.AgentRuntimeServiceTest,com.fsaint.androidagent.BootRecoveryTest --no-daemon
+```
+
+Output:
+
+```text
+> Task :app:connectedDebugAndroidTest
+Starting 12 tests on SM-F711U1 - 15
+
+Finished 12 tests on SM-F711U1 - 15
+
+BUILD SUCCESSFUL in 19s
+321 actionable tasks: 7 executed, 314 up-to-date
+```
+
+```bash
+./gradlew :app:testDebugUnitTest --tests '*AgentRuntimeCoordinatorTest' --no-daemon
+```
+
+Output:
+
+```text
+> Task :app:testDebugUnitTest
+
+BUILD SUCCESSFUL in 8s
+215 actionable tasks: 3 executed, 212 up-to-date
+```
+
+```bash
+git diff --check
+```
+
+Output: no whitespace errors.
+
+Review-fix concerns:
+
+- The real service launch regression uses `dumpsys activity services` because it needs to verify the actual Android service/notification path rather than only an injected fake. This is a connected-device regression and may need adjustment if future Android versions change `dumpsys` formatting.
+- The `remoteMessaging` foreground-service type/permission remains intentionally present per review ruling and target-35 enforcement; no microphone, camera, location, health, or other sensor foreground-service types were added.

@@ -70,12 +70,20 @@ internal class AgentRuntimeServiceCommandHandler(
     private val stopSelfResult: (Int) -> Unit,
 ) {
     fun handle(intent: Intent?, startId: Int): Int {
-        when (intent?.action ?: AgentRuntimeService.ACTION_START) {
-            AgentRuntimeService.ACTION_STOP -> stopRuntime(startId)
-            AgentRuntimeService.ACTION_RESTART -> restartRuntime()
-            else -> startRuntime()
+        return when (intent?.action ?: AgentRuntimeService.ACTION_START) {
+            AgentRuntimeService.ACTION_STOP -> {
+                stopRuntime(startId)
+                Service.START_NOT_STICKY
+            }
+            AgentRuntimeService.ACTION_RESTART -> {
+                restartRuntime()
+                Service.START_STICKY
+            }
+            else -> {
+                startRuntime()
+                Service.START_STICKY
+            }
         }
-        return Service.START_STICKY
     }
 
     private fun startRuntime() {

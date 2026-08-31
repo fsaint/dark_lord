@@ -3,12 +3,18 @@ package com.fsaint.androidagent
 import android.app.Notification
 import android.app.NotificationManager
 import android.app.Service
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.os.Build
+import android.os.SystemClock
+import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +25,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.FileInputStream
 
 @RunWith(AndroidJUnit4::class)
 class AgentRuntimeServiceTest {
@@ -81,7 +88,7 @@ class AgentRuntimeServiceTest {
 
         val result = handler.handle(Intent().setAction(AgentRuntimeService.ACTION_STOP), startId = 3)
 
-        assertEquals(Service.START_STICKY, result)
+        assertEquals(Service.START_NOT_STICKY, result)
         assertEquals(1, coordinator.stops)
         assertEquals(1, foreground.stops)
         assertEquals(listOf(3), stoppedStartIds)
@@ -124,6 +131,64 @@ class AgentRuntimeServiceTest {
         )
         assertEquals(0, info.foregroundServiceType and ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
         assertEquals(0, info.foregroundServiceType and ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+    }
+
+    @Test
+    fun notificationPermissionGateStartsImmediatelyBeforeAndroid13() {
+        assertTrue(shouldStartBackgroundRuntimeWithNotificationPermission(Build.VERSION_CODES.S, permissionGranted = false))
+    }
+
+    @Test
+    fun notificationPermissionGateRequiresGrantOnAndroid13AndNewer() {
+        assertFalse(shouldStartBackgroundRuntimeWithNotificationPermission(Build.VERSION_CODES.TIRAMISU, permissionGranted = false))
+        assertTrue(shouldStartBackgroundRuntimeWithNotificationPermission(Build.VERSION_CODES.TIRAMISU, permissionGranted = true))
+    }
+
+    @Test
+    fun foregroundActivityLaunchStartsRealForegroundServiceWhenNotificationsAllowed() {
+        grantPostNotificationsIfNeeded()
+        val application = context.applicationContext as DarkLordApplication
+
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use {
+                waitUntil { runtimeServiceDump().contains("isForeground=true") }
+            }
+
+            val dump = runtimeServiceDump()
+            assertTrue(dump, dump.contains("isForeground=true"))
+            assertTrue(dump, dump.contains("channel=agent_runtime"))
+        } finally {
+            application.stopBackgroundRuntime()
+        }
+    }
+
+    private fun grantPostNotificationsIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("pm grant ${context.packageName} ${Manifest.permission.POST_NOTIFICATIONS}")
+            .close()
+        waitUntil {
+            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private fun runtimeServiceDump(): String {
+        val serviceName = "${context.packageName}/.AgentRuntimeService"
+        return shell("dumpsys activity services $serviceName")
+    }
+
+    private fun shell(command: String): String {
+        val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command)
+        return FileInputStream(descriptor.fileDescriptor).bufferedReader().use { it.readText() }
+    }
+
+    private fun waitUntil(predicate: () -> Boolean) {
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (predicate()) return
+            SystemClock.sleep(50)
+        }
+        assertTrue("Condition was not met before timeout", predicate())
     }
 }
 
