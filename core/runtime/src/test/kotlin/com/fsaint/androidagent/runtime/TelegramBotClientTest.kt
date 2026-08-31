@@ -64,6 +64,46 @@ class TelegramBotClientTest {
         assertEquals(0, transport.calls)
     }
 
+    @Test
+    fun onlyCanonicalTelegramOriginIsAccepted() = runTest {
+        val transport = FakeTransport(TelegramHttpResponse(200, "{\"ok\":true}"))
+        val rejectedOrigins = listOf(
+            "https://evil.example",
+            "https://api.telegram.org.evil.example",
+            "https://user:pass@api.telegram.org",
+            "https://api.telegram.org.evil.example/",
+            "https://api.telegram.org/v1",
+            "https://api.telegram.org/%2f",
+            "https://api.telegram.org?redirect=evil",
+            "https://api.telegram.org:8443",
+        )
+
+        rejectedOrigins.forEach { origin ->
+            val result = TelegramBotClient(transport, StaticToken(token), origin).sendMessage("1", "x")
+            assertIs<TelegramResult.Failure>(result, origin)
+        }
+        assertEquals(0, transport.calls)
+    }
+
+    @Test
+    fun tokenMustBePathSafeBeforeTransportIsCalled() = runTest {
+        val transport = FakeTransport(TelegramHttpResponse(200, "{\"ok\":true}"))
+        val result = TelegramBotClient(transport, StaticToken("123:bad/token"))
+            .sendMessage("1", "x")
+
+        assertIs<TelegramResult.Failure>(result)
+        assertEquals(0, transport.calls)
+    }
+
+    @Test
+    fun redirectResponsesAreNeverAcceptedAsSuccess() = runTest {
+        val transport = FakeTransport(TelegramHttpResponse(302, "{\"ok\":true,\"result\":{\"message_id\":1}}"))
+
+        val result = client(transport).sendMessage("1", "x")
+
+        assertEquals(TelegramResult.Failure(302, "Telegram request failed"), result)
+    }
+
     private fun client(transport: FakeTransport) = TelegramBotClient(transport, StaticToken(token))
 
     private class StaticToken(private val value: String) : TelegramBotTokenProvider {

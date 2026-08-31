@@ -1,6 +1,7 @@
 package com.fsaint.androidagent.runtime
 
 import java.nio.charset.StandardCharsets
+import java.net.URI
 
 /** A request passed to the Android (or test) HTTP implementation. */
 class TelegramHttpRequest(
@@ -70,7 +71,7 @@ class TelegramBotClient(
             return ParsedTelegramResponse(false, errorCode = null, description = "Telegram payload exceeds limits")
         }
         val token = runCatching { tokenProvider.apiToken() }.getOrNull()
-            ?.takeIf { it.isNotBlank() && it.length <= MAX_TOKEN_LENGTH }
+            ?.takeIf { TOKEN_PATTERN.matches(it) }
             ?: return ParsedTelegramResponse(false, errorCode = null, description = "Telegram bot token is not configured")
         val url = "$baseUrl/bot$token/$method"
         val response = runCatching { transport.execute(TelegramHttpRequest(url, body, requestTimeout)) }
@@ -104,7 +105,16 @@ class TelegramBotClient(
         }
     }
 
-    private fun normalizedBaseUrl(): String? = apiBaseUrl.trimEnd('/').takeIf { it.startsWith("https://") }
+    private fun normalizedBaseUrl(): String? {
+        val uri = runCatching { URI(apiBaseUrl) }.getOrNull() ?: return null
+        if (uri.scheme != "https" || uri.host != TELEGRAM_HOST ||
+            (uri.port != -1 && uri.port != 443) || uri.userInfo != null ||
+            uri.rawPath !in listOf("", "/") || uri.rawQuery != null || uri.rawFragment != null
+        ) return null
+        // Always construct requests from this canonical origin; never preserve attacker-controlled
+        // casing, path, query, fragment, or authority components from the configured value.
+        return "https://$TELEGRAM_HOST"
+    }
 
     private fun escape(value: String): String = buildString(value.length) {
         value.forEach { character ->
@@ -136,6 +146,8 @@ class TelegramBotClient(
         private const val MAX_TEXT_LENGTH = 4_096
         private const val MAX_CHAT_ID_LENGTH = 256
         private const val MAX_TOKEN_LENGTH = 512
+        private const val TELEGRAM_HOST = "api.telegram.org"
+        private val TOKEN_PATTERN = Regex("^[0-9]{1,16}:[A-Za-z0-9_-]{20,}$")
     }
 }
 
