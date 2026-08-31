@@ -147,7 +147,7 @@ class DarkLordApplication : Application() {
     private val scopes = ScopeRegistry()
     private val mcpCatalog = ConcurrentHashMap.newKeySet<String>()
     private val skillCatalog = ConcurrentHashMap.newKeySet<String>()
-    private val telegramOwnerChat = TelegramOwnerChatStore(this)
+    private val telegramOwnerChat by lazy { TelegramOwnerChatStore(this) }
     private val durableState by lazy { DurableStateRepository(database.durableStateDao()) }
     private val agentTools by lazy {
         ScopedToolRouter(
