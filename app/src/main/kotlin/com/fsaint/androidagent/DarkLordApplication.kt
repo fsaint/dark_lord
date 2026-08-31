@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Settings
+import androidx.core.content.ContextCompat
 import com.fsaint.androidagent.capabilities.accessibility.AccessibilityCapability
 import com.fsaint.androidagent.capabilities.accessibility.AndroidAccessibilityAdapter
 import com.fsaint.androidagent.capabilities.apps.AppsCapability
@@ -248,7 +249,6 @@ class DarkLordApplication : Application() {
             skillCatalog += durableState.enabledSkillIds()
         }
         BootRecoveryDependencies.coordinator = runtimeCoordinator
-        runtimeCoordinator.start()
         SmsBroadcastReceiverDependencies.configure(object : SmsEventSink {
             override fun publish(event: AgentEvent) = smsCapability.publish(event)
         })
@@ -283,6 +283,14 @@ class DarkLordApplication : Application() {
 
     /** Explicitly stops Telegram polling and waits for its durable boundary to close. */
     suspend fun stopTelegramUpdates() = runtimeCoordinator.stop()
+
+    fun startBackgroundRuntime() {
+        ContextCompat.startForegroundService(this, AgentRuntimeService.startIntent(this))
+    }
+
+    fun stopBackgroundRuntime() {
+        startService(AgentRuntimeService.stopIntent(this))
+    }
 
     /** Cancels and joins all application work after Telegram's polling boundary is closed. */
     suspend fun shutdown() {

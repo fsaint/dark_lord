@@ -114,6 +114,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        (application as DarkLordApplication).startBackgroundRuntime()
+    }
+
     private fun requestAssistantRole() {
         val roles = getSystemService(RoleManager::class.java)
         if (roles.isRoleAvailable(RoleManager.ROLE_ASSISTANT) && !roles.isRoleHeld(RoleManager.ROLE_ASSISTANT)) {
