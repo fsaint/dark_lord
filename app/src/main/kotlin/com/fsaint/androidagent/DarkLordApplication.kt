@@ -86,9 +86,12 @@ import com.fsaint.androidagent.ui.OpenAssistantScreen
 import com.fsaint.androidagent.voice.SpeechTranscriptBus
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.runBlocking
 import android.speech.tts.TextToSpeech
 
 /** Application lifecycle adapter that preserves Telegram's durable shutdown boundary. */
@@ -98,8 +101,20 @@ internal class TelegramUpdatesLifecycle(
     suspend fun stop() = updates.stop()
 }
 
+/** Coordinates Android application teardown with Telegram's joined polling shutdown. */
+internal class ApplicationShutdownLifecycle(
+    private val telegram: TelegramUpdatesLifecycle,
+    private val supervisor: Job,
+) {
+    suspend fun shutdown() {
+        telegram.stop()
+        supervisor.cancelAndJoin()
+    }
+}
+
 class DarkLordApplication : Application() {
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val applicationSupervisor = SupervisorJob()
+    private val applicationScope = CoroutineScope(applicationSupervisor + Dispatchers.IO)
     private val database by lazy { EncryptedAgentDatabaseFactory.open(this) }
     val principals: PrincipalDirectory by lazy { PrincipalRepository(database.durableStateDao()) }
     private val smsCapability by lazy { SmsCapability(this) }
@@ -161,6 +176,7 @@ class DarkLordApplication : Application() {
         )
     }
     private val telegramUpdatesLifecycle by lazy { TelegramUpdatesLifecycle(telegramUpdates) }
+    private val shutdownLifecycle by lazy { ApplicationShutdownLifecycle(telegramUpdatesLifecycle, applicationSupervisor) }
     private val conversationModel by lazy { OpenAiHttpClient(UrlConnectionOpenAiTransport(), openAiCredentials) }
     private val conversationHarness by lazy {
         ConversationHarness(
@@ -245,6 +261,14 @@ class DarkLordApplication : Application() {
 
     /** Explicitly stops Telegram polling and waits for its durable boundary to close. */
     suspend fun stopTelegramUpdates() = telegramUpdatesLifecycle.stop()
+
+    /** Cancels and joins all application work after Telegram's polling boundary is closed. */
+    suspend fun shutdown() = shutdownLifecycle.shutdown()
+
+    override fun onTerminate() {
+        runBlocking { shutdown() }
+        super.onTerminate()
+    }
 
     fun communicationsAccessStatus(): CommunicationsAccessStatus {
         val roleManager = getSystemService(RoleManager::class.java)

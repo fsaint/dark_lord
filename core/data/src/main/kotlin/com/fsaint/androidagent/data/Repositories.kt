@@ -17,6 +17,8 @@ import com.fsaint.androidagent.runtime.PendingReply
 import com.fsaint.androidagent.runtime.ToolEffectReservation
 import com.fsaint.androidagent.runtime.ToolIdempotencyKey
 import com.fsaint.androidagent.model.ToolCall
+import com.fsaint.androidagent.model.ToolError
+import com.fsaint.androidagent.model.ToolResult
 import java.nio.charset.StandardCharsets
 
 class EventRepository(private val dao: EventDao) : EventStore {
@@ -53,19 +55,34 @@ class EventRepository(private val dao: EventDao) : EventStore {
 
     override suspend fun clearPendingReply(eventId: String) = dao.deletePendingReply(eventId)
 
-    override suspend fun reserveToolEffect(eventId: String, tool: ToolCall): ToolEffectReservation {
-        val id = ToolIdempotencyKey.forCall(eventId, 0, tool)
-        val inserted = dao.insertToolEffect(ToolEffectEntity(id, eventId, tool.name, TOOL_EFFECT_PENDING, null))
+    override suspend fun reserveToolEffect(eventId: String, tool: ToolCall, turn: Int): ToolEffectReservation {
+        val id = ToolIdempotencyKey.forCall(eventId, turn, tool)
+        val inserted = dao.insertToolEffect(ToolEffectEntity(id, eventId, tool.name, TOOL_EFFECT_PENDING, null, false, null, false, VerificationState.UNVERIFIED.name))
         if (inserted != -1L) return ToolEffectReservation.Reserved
         val existing = checkNotNull(dao.toolEffect(id))
         return when (existing.state) {
-            TOOL_EFFECT_COMPLETED -> ToolEffectReservation.Completed(checkNotNull(existing.replyText).toString(StandardCharsets.UTF_8))
+            TOOL_EFFECT_COMPLETED -> ToolEffectReservation.Completed(
+                ToolResult(
+                    success = existing.success,
+                    payload = existing.payload?.toString(StandardCharsets.UTF_8),
+                    error = existing.error?.let(ToolError::valueOf),
+                    recoverable = existing.recoverable,
+                    verification = VerificationState.valueOf(existing.verification),
+                ),
+            )
             else -> ToolEffectReservation.Pending
         }
     }
 
-    override suspend fun completeToolEffect(eventId: String, tool: ToolCall, replyText: String) {
-        dao.completeToolEffect(ToolIdempotencyKey.forCall(eventId, 0, tool), replyText.toByteArray(StandardCharsets.UTF_8))
+    override suspend fun completeToolEffect(eventId: String, tool: ToolCall, turn: Int, result: ToolResult<Any>) {
+        dao.completeToolEffect(
+            ToolIdempotencyKey.forCall(eventId, turn, tool),
+            result.payload?.toString()?.toByteArray(StandardCharsets.UTF_8),
+            result.success,
+            result.error?.name,
+            result.recoverable,
+            result.verification.name,
+        )
     }
 
     private companion object {

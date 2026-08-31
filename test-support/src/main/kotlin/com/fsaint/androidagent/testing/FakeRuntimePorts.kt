@@ -4,6 +4,7 @@ import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.ScopedAgentSession
 import com.fsaint.androidagent.model.ToolCall
+import com.fsaint.androidagent.model.ToolResult
 import com.fsaint.androidagent.policy.AgentContext
 
 class InMemoryEventStore : EventStore {
@@ -26,12 +27,12 @@ class InMemoryEventStore : EventStore {
         pendingReplies[reply.eventId] = reply
     }
     override suspend fun clearPendingReply(eventId: String) { pendingReplies.remove(eventId) }
-    override suspend fun reserveToolEffect(eventId: String, tool: ToolCall): ToolEffectReservation {
-        val key = "$eventId:${tool.name}:${tool.arguments.toSortedMap()}"
+    override suspend fun reserveToolEffect(eventId: String, tool: ToolCall, turn: Int): ToolEffectReservation {
+        val key = "$eventId:$turn:${tool.name}:${tool.arguments.toSortedMap()}"
         return toolEffects[key] ?: ToolEffectReservation.Reserved.also { toolEffects[key] = ToolEffectReservation.Pending }
     }
-    override suspend fun completeToolEffect(eventId: String, tool: ToolCall, replyText: String) {
-        toolEffects["$eventId:${tool.name}:${tool.arguments.toSortedMap()}"] = ToolEffectReservation.Completed(replyText)
+    override suspend fun completeToolEffect(eventId: String, tool: ToolCall, turn: Int, result: ToolResult<Any>) {
+        toolEffects["$eventId:$turn:${tool.name}:${tool.arguments.toSortedMap()}"] = ToolEffectReservation.Completed(result)
     }
     override suspend fun markCompleted(eventId: String) { completed += eventId }
 }

@@ -24,11 +24,11 @@ interface TelegramResult {
     data class Failure(val errorCode: Int? = null, val description: String = "Telegram request failed") : TelegramResult
 }
 
-/** A text update from a Telegram chat. Non-text updates are intentionally ignored. */
+/** A Telegram update. Non-text updates retain their IDs so callers can durably acknowledge them. */
 data class TelegramUpdate(
     val updateId: Long,
-    val chatId: String,
-    val text: String,
+    val chatId: String? = null,
+    val text: String? = null,
 )
 
 /**
@@ -97,10 +97,10 @@ class TelegramBotClient(
         return updates.mapNotNull { item ->
             val update = item as? Map<*, *> ?: return@mapNotNull null
             val updateId = (update["update_id"] as? Number)?.toLong() ?: return@mapNotNull null
-            val message = update["message"] as? Map<*, *> ?: return@mapNotNull null
-            val chat = message["chat"] as? Map<*, *> ?: return@mapNotNull null
-            val chatId = chat["id"]?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val text = message["text"] as? String ?: return@mapNotNull null
+            val message = update["message"] as? Map<*, *>
+            val chat = message?.get("chat") as? Map<*, *>
+            val chatId = chat?.get("id")?.toString()?.takeIf { it.isNotBlank() }
+            val text = message?.get("text") as? String
             TelegramUpdate(updateId, chatId, text)
         }
     }

@@ -1,5 +1,6 @@
 package com.fsaint.androidagent.telegram
 
+import com.fsaint.androidagent.ApplicationShutdownLifecycle
 import com.fsaint.androidagent.TelegramUpdatesLifecycle
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.DeliveryState
@@ -219,6 +220,21 @@ class TelegramUpdateServiceTest {
     }
 
     @Test
+    fun nonTextUpdatesAreAcknowledgedWithoutDispatchingAnAgentEvent() = runTest {
+        val client = RecordingTelegramClient(listOf(TelegramUpdate(10)))
+        val checkpoint = RecordingCheckpointStore()
+        var sinkRuns = 0
+        val service = service(client, checkpoint) { _, _ -> sinkRuns += 1 }
+
+        service.pollOnce()
+        service.pollOnce()
+
+        assertEquals(0, sinkRuns)
+        assertEquals(listOf(11L), checkpoint.savedOffsets)
+        assertEquals(listOf<Long?>(null, 11L), client.offsets)
+    }
+
+    @Test
     fun overlappingPollsReserveAnUpdateBeforeTheSinkCanRunItTwice() = runTest {
         val client = RecordingTelegramClient(listOf(TelegramUpdate(10, "42", "hello")))
         val checkpoint = RecordingCheckpointStore()
@@ -258,13 +274,15 @@ class TelegramUpdateServiceTest {
 
         val poll = async { service.pollOnce() }
         sinkStarted.await()
-        val stopping = async { TelegramUpdatesLifecycle(service).stop() }
+        val applicationSupervisor = kotlinx.coroutines.SupervisorJob()
+        val stopping = async { ApplicationShutdownLifecycle(TelegramUpdatesLifecycle(service), applicationSupervisor).shutdown() }
         runCurrent()
 
         assertFalse(stopping.isCompleted)
         releaseSink.complete(Unit)
         poll.await()
         stopping.await()
+        assertTrue(applicationSupervisor.isCancelled)
     }
 
     private fun TestScope.service(

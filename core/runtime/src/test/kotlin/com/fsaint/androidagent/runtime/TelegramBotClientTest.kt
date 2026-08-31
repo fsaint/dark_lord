@@ -22,7 +22,7 @@ class TelegramBotClientTest {
     }
 
     @Test
-    fun parsesTextUpdatesAndIgnoresNonTextUpdates() = runTest {
+    fun parsesTextUpdatesAndRetainsNonTextUpdateIdsForAcknowledgement() = runTest {
         val transport = FakeTransport(TelegramHttpResponse(200, """
             {"ok":true,"result":[
               {"update_id":10,"message":{"chat":{"id":99},"text":"hello"}},
@@ -30,7 +30,7 @@ class TelegramBotClientTest {
             ]}
         """.trimIndent()))
 
-        assertEquals(listOf(TelegramUpdate(10, "99", "hello")), client(transport).getUpdates(9, 12))
+        assertEquals(listOf(TelegramUpdate(10, "99", "hello"), TelegramUpdate(11, "99")), client(transport).getUpdates(9, 12))
         val request = transport.last!!
         assertEquals("https://api.telegram.org/bot$token/getUpdates", request.url)
         assertTrue(request.body.contains("\"offset\":9"))

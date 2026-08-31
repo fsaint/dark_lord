@@ -91,15 +91,17 @@ class ConversationHarness(
                 }
                 is ConversationResponse.Tool -> {
                     calls += response.call
-                    val result: ToolResult<Any> = when (val effect = toolEffects?.reserveToolEffect(request.event.id, response.call)) {
-                        is ToolEffectReservation.Completed -> ToolResult<Any>(true, effect.replyText)
+                    val turn = transcript.nextTurn
+                    val result: ToolResult<Any> = when (val effect = toolEffects?.reserveToolEffect(request.event.id, response.call, turn)) {
+                        is ToolEffectReservation.Completed -> effect.result
                         ToolEffectReservation.Pending -> ToolResult<Any>(false, error = com.fsaint.androidagent.model.ToolError.FAILED, recoverable = true)
                         ToolEffectReservation.Reserved, null -> {
                             val executed = tools.execute(request.session, response.call)
                             toolEffects?.completeToolEffect(
                                 request.event.id,
                                 response.call,
-                                executed.payload?.toString() ?: executed.error?.name.orEmpty(),
+                                turn,
+                                executed,
                             )
                             executed
                         }

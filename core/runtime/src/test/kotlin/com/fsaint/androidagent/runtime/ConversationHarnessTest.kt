@@ -86,6 +86,28 @@ class ConversationHarnessTest {
         assertEquals(1, toolCalls)
         assertEquals("done", replay.response)
     }
+
+    @Test fun identicalToolCallsInDifferentConversationTurnsRunIndependently() = runTest {
+        val effects = InMemoryEventStore()
+        var toolCalls = 0
+        val harness = ConversationHarness(
+            ScriptedConversationModel(
+                ConversationResponse.Tool(ToolCall("device.battery")),
+                ConversationResponse.Tool(ToolCall("device.battery")),
+                ConversationResponse.Final("done"),
+            ),
+            router("device.battery" to {
+                toolCalls += 1
+                ToolResult(true, "$toolCalls%", verification = VerificationState.VERIFIED)
+            }),
+            toolEffects = effects,
+        )
+
+        val result = harness.run(ConversationRequest(session, event, context, "hello"))
+
+        assertEquals(2, toolCalls)
+        assertEquals("done", result.response)
+    }
 }
 
 private fun router(vararg tools: Pair<String, suspend (ToolCall) -> ToolResult<*>>) = ScopedToolRouter(

@@ -16,8 +16,8 @@ interface EventStore {
     suspend fun savePendingReply(reply: PendingReply) = Unit
     suspend fun clearPendingReply(eventId: String) = Unit
     /** Reserves an external tool effect before the tool is allowed to mutate device state. */
-    suspend fun reserveToolEffect(eventId: String, tool: ToolCall): ToolEffectReservation = ToolEffectReservation.Reserved
-    suspend fun completeToolEffect(eventId: String, tool: ToolCall, replyText: String) = Unit
+    suspend fun reserveToolEffect(eventId: String, tool: ToolCall, turn: Int = 0): ToolEffectReservation = ToolEffectReservation.Reserved
+    suspend fun completeToolEffect(eventId: String, tool: ToolCall, turn: Int = 0, result: com.fsaint.androidagent.model.ToolResult<Any>) = Unit
     suspend fun markCompleted(eventId: String)
 }
 interface AuditStore { suspend fun append(record: AuditRecord) }
@@ -69,5 +69,5 @@ data class PendingReply(val eventId: String, val channel: String, val recipient:
 sealed interface ToolEffectReservation {
     data object Reserved : ToolEffectReservation
     data object Pending : ToolEffectReservation
-    data class Completed(val replyText: String) : ToolEffectReservation
+    data class Completed(val result: com.fsaint.androidagent.model.ToolResult<Any>) : ToolEffectReservation
 }

@@ -124,16 +124,20 @@ class TelegramUpdateService(
         }
         if (!reserved) return
         try {
-            eventSink.accept(
-                AgentEvent(
-                    id = "telegram:${update.updateId}",
-                    type = "telegram.received",
-                    source = update.chatId,
-                    occurredAtEpochMs = clock(),
-                    payload = mapOf("sender" to update.chatId, "body" to update.text),
-                ),
-                TELEGRAM_CHANNEL,
-            )
+            val chatId = update.chatId
+            val text = update.text
+            if (chatId != null && text != null) {
+                eventSink.accept(
+                    AgentEvent(
+                        id = "telegram:${update.updateId}",
+                        type = "telegram.received",
+                        source = chatId,
+                        occurredAtEpochMs = clock(),
+                        payload = mapOf("sender" to chatId, "body" to text),
+                    ),
+                    TELEGRAM_CHANNEL,
+                )
+            }
             checkpointStore.saveOffset(acknowledgedOffset)
             stateLock.withLock {
                 nextOffset = maxOf(nextOffset ?: Long.MIN_VALUE, acknowledgedOffset)

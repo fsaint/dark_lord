@@ -74,7 +74,7 @@ class AgentRuntime(
         val recipient = event.payload["sender"]?.takeIf(String::isNotBlank) ?: event.source
         when (val effect = events.reserveToolEffect(event.id, action.call)) {
             is ToolEffectReservation.Completed -> {
-                deliverAndComplete(event, session.channel, recipient, effect.replyText)
+                deliverAndComplete(event, session.channel, recipient, toolReply(effect.result))
                 return
             }
             ToolEffectReservation.Pending -> {
@@ -84,15 +84,9 @@ class AgentRuntime(
             ToolEffectReservation.Reserved -> Unit
         }
         val result = tools.execute(session, action.call)
-        val verified = verification.isVerified(result)
         val authorization = if (result.error == ToolError.SCOPE_DENIED) AuthorizationDecision.DENY else AuthorizationDecision.ALLOW
-        val text = when {
-            verified -> result.payload.toString()
-            result.recoverable -> "I couldn't complete that yet; I will retry or ask for help."
-            result.error == ToolError.SCOPE_DENIED -> "I’m not allowed to access that."
-            else -> "I couldn't verify that action completed."
-        }
-        events.completeToolEffect(event.id, action.call, text)
+        val text = toolReply(result)
+        events.completeToolEffect(event.id, action.call, result = result)
         audit.append(auditRecord(event, session, action.call.name, authorization, result.verification, result.error?.name ?: text))
         deliverAndComplete(event, session.channel, recipient, text)
     }
@@ -102,6 +96,13 @@ class AgentRuntime(
         replies.send(channel, recipient, text)
         events.clearPendingReply(event.id)
         events.markCompleted(event.id)
+    }
+
+    private fun toolReply(result: com.fsaint.androidagent.model.ToolResult<Any>): String = when {
+        verification.isVerified(result) -> result.payload.toString()
+        result.recoverable -> "I couldn't complete that yet; I will retry or ask for help."
+        result.error == ToolError.SCOPE_DENIED -> "I’m not allowed to access that."
+        else -> "I couldn't verify that action completed."
     }
 
     private fun auditRecord(event: AgentEvent, session: ScopedAgentSession, tool: String, authorization: AuthorizationDecision, verification: VerificationState, result: String) =

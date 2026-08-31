@@ -8,6 +8,8 @@ import com.fsaint.androidagent.model.VerificationState
 import com.fsaint.androidagent.runtime.PendingReply
 import com.fsaint.androidagent.runtime.ToolEffectReservation
 import com.fsaint.androidagent.model.ToolCall
+import com.fsaint.androidagent.model.ToolResult
+import com.fsaint.androidagent.model.ToolError
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -110,8 +112,10 @@ class EventRepositoryTest {
         try {
             val repository = EventRepository(reopenedDatabase.eventDao())
             assertEquals(ToolEffectReservation.Pending, repository.reserveToolEffect("telegram:10", call))
-            repository.completeToolEffect("telegram:10", call, "72%")
-            assertEquals(ToolEffectReservation.Completed("72%"), repository.reserveToolEffect("telegram:10", call))
+            val result = ToolResult<Any>(false, "partial", ToolError.TIMEOUT, recoverable = true, verification = VerificationState.UNVERIFIED)
+            repository.completeToolEffect("telegram:10", call, result = result)
+            assertEquals(ToolEffectReservation.Completed(result), repository.reserveToolEffect("telegram:10", call))
+            assertEquals(ToolEffectReservation.Reserved, repository.reserveToolEffect("telegram:10", call, turn = 1))
         } finally {
             reopenedDatabase.close()
         }
