@@ -76,6 +76,8 @@ class OpenAiHttpClient(
         val tools = context.resources.joinToString(",") {
             val parameters = if (it == "browser.open")
                 "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"HTTPS URL to open\"}},\"required\":[\"url\"],\"additionalProperties\":false}"
+            else if (it == "telegram.send_photo")
+                "{\"type\":\"object\",\"properties\":{\"artifactId\":{\"type\":\"string\"},\"chatId\":{\"type\":\"string\"}},\"required\":[\"artifactId\"],\"additionalProperties\":false}"
             else "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
             "{\"type\":\"function\",\"name\":\"${toolName(it)}\",\"description\":\"Phone capability: ${escape(it)}\",\"parameters\":$parameters}"
         }

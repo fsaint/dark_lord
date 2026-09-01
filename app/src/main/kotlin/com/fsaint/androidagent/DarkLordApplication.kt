@@ -86,6 +86,9 @@ import com.fsaint.androidagent.ui.CallScreenActivity
 import com.fsaint.androidagent.ui.CommunicationsAccessStatus
 import com.fsaint.androidagent.ui.OpenAssistantScreen
 import com.fsaint.androidagent.voice.SpeechTranscriptBus
+import com.fsaint.androidagent.artifacts.ArtifactStore
+import com.fsaint.androidagent.capabilities.camera.CameraCaptureRequest
+import com.fsaint.androidagent.capabilities.camera.CameraCaptureOutcome
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -151,6 +154,8 @@ class DarkLordApplication : Application() {
     private val skillCatalog = ConcurrentHashMap.newKeySet<String>()
     private val telegramOwnerChat by lazy { TelegramOwnerChatStore(this) }
     private val browserTools by lazy { BrowserTools() }
+    private val artifactStore by lazy { ArtifactStore(this) }
+    private val telegramPhotoSender by lazy { TelegramPhotoSender(telegramBotCredentials, artifactStore) { telegramOwnerChat.read() } }
     private val durableState by lazy { DurableStateRepository(database.durableStateDao()) }
     private val agentTools by lazy {
         ScopedToolRouter(
@@ -160,11 +165,14 @@ class DarkLordApplication : Application() {
                 accessibilityCapability.toolHandlers() +
                 screenCapability.toolHandlers() +
                 cameraCapability.toolHandlers() +
+                mapOf("camera.capture" to captureArtifactHandler()) +
                 microphoneCapability.toolHandlers() +
                 audioCapability.toolHandlers() +
                 radioCapability.toolHandlers() +
                 environmentCapability.toolHandlers() +
-                browserTools.handlers(),
+                browserTools.handlers() +
+                artifactStore.handlers() +
+                telegramPhotoSender.handlers(),
             scopes,
         )
     }
@@ -245,6 +253,7 @@ class DarkLordApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        artifactStore.cleanup()
         applicationScope.launch {
             mcpCatalog += durableState.mcpConfigurations().map { it.id }
             skillCatalog += durableState.enabledSkillIds()
@@ -280,6 +289,24 @@ class DarkLordApplication : Application() {
             )
         }
         AgentSurfaceRegistry.coverContent = { CoverAssistantScreen() }
+    }
+
+    private fun captureArtifactHandler(): suspend (com.fsaint.androidagent.model.ToolCall) -> com.fsaint.androidagent.model.ToolResult<Any> = { call ->
+        val result = cameraCapability.capture(
+            CameraCaptureRequest(
+                cameraId = call.arguments["cameraId"],
+                maxWidth = call.arguments["maxWidth"]?.toIntOrNull() ?: 1920,
+                maxHeight = call.arguments["maxHeight"]?.toIntOrNull() ?: 1080,
+                maxBytes = call.arguments["maxBytes"]?.toIntOrNull() ?: 4_000_000,
+            ),
+        )
+        val image = result.payload
+        if (result.success && image != null) {
+            val artifact = artifactStore.store(image.bytes, image.mimeType)
+            com.fsaint.androidagent.model.ToolResult(true, artifact, verification = VerificationState.VERIFIED)
+        } else {
+            com.fsaint.androidagent.model.ToolResult(false, error = result.error, recoverable = result.recoverable)
+        }
     }
 
     /** Explicitly stops Telegram polling and waits for its durable boundary to close. */
