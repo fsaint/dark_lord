@@ -75,6 +75,38 @@ class OpenAiResponsesProviderTest {
     }
 
     @Test
+    fun tellsModelWhichChatItIsInSoItNeverAsksForAChatId() = runTest {
+        val telegram = ScopeRegistry().sessionFor(Principal("owner", null, PrincipalRole.OWNER), "TELEGRAM")
+        val message = AgentEvent("telegram:7", "telegram.received", "123456789", 1, mapOf("sender" to "123456789", "body" to "send me a photo"))
+        var body = ""
+        val client = OpenAiHttpClient(FakeTransport { request ->
+            body = request.body
+            OpenAiHttpResponse(200, "{\"output_text\":\"ok\"}")
+        }, StaticApiKey("sk-test"))
+
+        client.respond(ConversationRequest(telegram, message, AgentContext(setOf("telegram.send_photo"), emptyMap()), "send me a photo"))
+
+        assertTrue(body.contains("Conversation channel: TELEGRAM"), body)
+        assertTrue(body.contains("Chat id: 123456789"), body)
+        assertTrue(body.contains("never ask the user for it"), body)
+        assertTrue(body.contains("\"chatId\":{\"type\":\"string\",\"description\":\"Optional. The app supplies the current authenticated Telegram chat automatically. Never ask the owner for a chat ID.\"}"), body)
+    }
+
+    @Test
+    fun omitsChatIdLineWhenTheEventHasNoSender() = runTest {
+        var body = ""
+        val client = OpenAiHttpClient(FakeTransport { request ->
+            body = request.body
+            OpenAiHttpResponse(200, "{\"output_text\":\"ok\"}")
+        }, StaticApiKey("sk-test"))
+
+        client.respond(ConversationRequest(session, AgentEvent("voice:1", "voice.transcript", "voice", 1, mapOf("body" to "hi")), context, "hi"))
+
+        assertTrue(body.contains("Conversation channel: local"), body)
+        assertTrue(!body.contains("Chat id:"), body)
+    }
+
+    @Test
     fun rejectsInsecureOrOversizedResponsesWithoutLeakingKey() = runTest {
         val provider = OpenAiResponsesProvider(OpenAiHttpClient(FakeTransport { OpenAiHttpResponse(200, "x".repeat(100)) }, StaticApiKey("sk-secret"), maxBodyBytes = 32))
         val result = runCatching { provider.plan(session, event, context) }
