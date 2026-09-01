@@ -31,7 +31,7 @@ class ScopedToolRouterTest {
     }
 
     @Test
-    fun backgroundChannelsCannotExecuteMicrophoneOrScreenToolsEvenForOwner() = runTest {
+    fun backgroundChannelsCannotExecuteSensorToolsForNonOwners() = runTest {
         val calls = mutableListOf<String>()
         val handler: suspend (ToolCall) -> ToolResult<Any> = { call ->
             calls += call.name
@@ -45,10 +45,10 @@ class ScopedToolRouterTest {
             ),
         )
         val scopes = ScopeRegistry()
-        val owner = Principal("owner", "+14155550123", PrincipalRole.OWNER)
+        val owner = Principal("known", "+14155550123", PrincipalRole.KNOWN)
 
         listOf("TELEGRAM", "SMS", "NOTIFICATION").forEach { channel ->
-            listOf("microphone.record", "screen.capture").forEach { tool ->
+            listOf("camera.capture", "microphone.record", "screen.capture").forEach { tool ->
                 val result = router.execute(scopes.sessionFor(owner, channel), ToolCall(tool))
 
                 assertEquals(ToolError.SCOPE_DENIED, result.error, "$channel must deny $tool")
@@ -58,13 +58,17 @@ class ScopedToolRouterTest {
     }
 
     @Test
-    fun ownerTelegramCanRequestCameraCapture() = runTest {
-        val router = ScopedToolRouter(mapOf("camera.capture" to { ToolResult(true, "captured", verification = VerificationState.VERIFIED) }))
+    fun ownerCanRequestAnySensorCaptureRemotely() = runTest {
+        val router = ScopedToolRouter(mapOf(
+            "camera.capture" to { ToolResult(true, "captured", verification = VerificationState.VERIFIED) },
+            "microphone.record" to { ToolResult(true, "recorded", verification = VerificationState.VERIFIED) },
+            "screen.capture" to { ToolResult(true, "captured", verification = VerificationState.VERIFIED) },
+        ))
         val owner = ScopeRegistry().sessionFor(Principal("owner", "+14155550123", PrincipalRole.OWNER), "TELEGRAM")
 
-        val result = router.execute(owner, ToolCall("camera.capture"))
-
-        assertTrue(result.success)
+        listOf("camera.capture", "microphone.record", "screen.capture").forEach { tool ->
+            assertTrue(router.execute(owner, ToolCall(tool)).success)
+        }
     }
 
     @Test

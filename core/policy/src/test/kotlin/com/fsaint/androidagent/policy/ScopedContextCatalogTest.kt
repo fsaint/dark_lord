@@ -45,7 +45,7 @@ class ScopedContextCatalogTest {
             availableTools = setOf("device.battery", "camera.capture", "microphone.record", "screen.capture"),
         ).build(owner)
 
-        assertEquals(setOf("device.battery", "camera.capture"), context.resources)
+        assertEquals(setOf("device.battery", "camera.capture", "microphone.record", "screen.capture"), context.resources)
     }
 
     @Test

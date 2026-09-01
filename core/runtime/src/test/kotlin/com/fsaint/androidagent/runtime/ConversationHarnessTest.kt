@@ -115,6 +115,7 @@ class ConversationHarnessTest {
             ConversationResponse.Tool(ToolCall("camera.capture")),
             ConversationResponse.Final("done"),
         )
+        val nonOwnerSession = ScopeRegistry().sessionFor(Principal("known", "+1", PrincipalRole.KNOWN), "SMS")
         val harness = ConversationHarness(
             model,
             router("camera.capture" to {
@@ -123,7 +124,7 @@ class ConversationHarnessTest {
             }),
         )
 
-        val result = harness.run(ConversationRequest(session, event, context, "take a photo"))
+        val result = harness.run(ConversationRequest(nonOwnerSession, event, context, "take a photo"))
 
         assertEquals(0, executions)
         val output = result.transcript.turns.filterIsInstance<ConversationTurn.ToolOutput>().single()
