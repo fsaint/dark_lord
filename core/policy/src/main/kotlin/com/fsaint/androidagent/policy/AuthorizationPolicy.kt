@@ -115,7 +115,9 @@ private object AgentSurfaceToolPolicy {
     private val sensorToolPrefixes = listOf("camera.", "microphone.", "screen.")
 
     fun permits(session: ScopedAgentSession, tool: String): Boolean =
-        sensorToolPrefixes.none(tool::startsWith) || session.channel.uppercase() in explicitSensorSurfaces
+        sensorToolPrefixes.none(tool::startsWith) ||
+            session.channel.uppercase() in explicitSensorSurfaces ||
+            (session.role == PrincipalRole.OWNER && session.channel.uppercase() == "TELEGRAM" && tool == "camera.capture")
 }
 
 class ScopedMcpRouter(private val scopes: ScopeRegistry, private val connections: Set<String>) {

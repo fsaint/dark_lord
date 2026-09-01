@@ -31,7 +31,7 @@ class ScopedToolRouterTest {
     }
 
     @Test
-    fun backgroundChannelsCannotExecuteSensorToolsEvenForOwner() = runTest {
+    fun backgroundChannelsCannotExecuteMicrophoneOrScreenToolsEvenForOwner() = runTest {
         val calls = mutableListOf<String>()
         val handler: suspend (ToolCall) -> ToolResult<Any> = { call ->
             calls += call.name
@@ -48,13 +48,23 @@ class ScopedToolRouterTest {
         val owner = Principal("owner", "+14155550123", PrincipalRole.OWNER)
 
         listOf("TELEGRAM", "SMS", "NOTIFICATION").forEach { channel ->
-            listOf("camera.capture", "microphone.record", "screen.capture").forEach { tool ->
+            listOf("microphone.record", "screen.capture").forEach { tool ->
                 val result = router.execute(scopes.sessionFor(owner, channel), ToolCall(tool))
 
                 assertEquals(ToolError.SCOPE_DENIED, result.error, "$channel must deny $tool")
             }
         }
         assertTrue(calls.isEmpty())
+    }
+
+    @Test
+    fun ownerTelegramCanRequestCameraCapture() = runTest {
+        val router = ScopedToolRouter(mapOf("camera.capture" to { ToolResult(true, "captured", verification = VerificationState.VERIFIED) }))
+        val owner = ScopeRegistry().sessionFor(Principal("owner", "+14155550123", PrincipalRole.OWNER), "TELEGRAM")
+
+        val result = router.execute(owner, ToolCall("camera.capture"))
+
+        assertTrue(result.success)
     }
 
     @Test
