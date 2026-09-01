@@ -39,6 +39,19 @@ Send an SMS to the device, or invoke Dark Lord with the Side button, and ask a s
 
 To test voice, hold the side key, speak the same request, and release. Dark Lord listens as soon as the assistant surface appears, finalizes when you stop talking (or when you tap the surface), and speaks the reply while showing it on the cover display when folded or on the main screen when open. Android does not report the side-key release to apps, so the end of your sentence is what sends the request. If no key is configured, Dark Lord returns a setup message instead of crashing. Use the [Stage 13 push-to-talk checklist](device-test/stage-13-side-key-push-to-talk.md) for the full sequence.
 
+## Run Python from the agent
+
+Owner sessions can ask Dark Lord to run Python code, save scripts, and run them later. The embedded Python environment includes `requests` and `Pillow` and enforces bounded execution and output limits.
+
+```python
+import dark_lord
+battery = dark_lord.call_tool("device.battery")
+photo = dark_lord.call_tool("camera.capture")
+artifact_id = photo["payload"]["id"]
+```
+
+Use `dark_lord.artifact_create(data, mime_type)` for generated files and return the artifact ID to the agent for delivery through Telegram or another adapter. Android permissions still apply, and scripts cannot obtain root or bypass the app sandbox. Use `python.exec`, `python.save`, `python.list`, `python.run`, and `python.delete` through the conversational agent.
+
 ## Add an MCP server
 
 1. Open **MCP server settings** from the main screen.

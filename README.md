@@ -23,8 +23,9 @@ The conversational harness and Stage 12 background-runtime acceptance coverage a
 - Scoped authorization by owner, known principal, and unknown principal, with scope-denied responses and escalation support.
 - Owner provisioning, principal management, capability permission flows, Device Owner support, reboot recovery, scheduling, audit records, and bounded diagnostics.
 - Visible `specialUse` foreground runtime service for user-authorized Telegram polling and queued work, with persistent Stop/Restart notification actions and boot/process recovery only while runtime notifications are enabled.
-- Camera, microphone, and screen tools are removed from background Telegram/SMS/notification model context and denied again at the tool router; they remain available only to explicit foreground, voice, or capture surfaces.
+- Owner sessions can use camera, microphone, and screen tools from remote channels when the corresponding Android permissions are granted; non-owner background sessions remain restricted.
 - OpenAI Responses API conversational harness with model-selected tools, an eight-turn safety budget, one final SMS/voice response, and resumable Room-backed checkpoints.
+- Embedded Chaquopy Python 3.11 runtime for owner-authored one-shot and persistent scripts, with `dark_lord.call_tool(...)` bindings to the same scoped phone tools and artifact APIs used by the agent.
 - Owner-only OpenAI API-key setup stored in Android Keystore; credentials are excluded from diagnostics, messages, and audit output.
 - MCP connection foundations with scoped discovery, OAuth metadata, Streamable HTTP seams, private Tailscale server support, and network failure handling.
 - Owner-facing MCP server settings for saving and removing HTTPS endpoints with optional OAuth configuration.

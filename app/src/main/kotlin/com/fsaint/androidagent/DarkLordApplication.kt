@@ -91,6 +91,8 @@ import com.fsaint.androidagent.voice.PushToTalkController
 import com.fsaint.androidagent.voice.TurnDispatcher
 import com.fsaint.androidagent.voice.VoiceResponder
 import com.fsaint.androidagent.artifacts.ArtifactStore
+import com.chaquo.python.Python
+import com.chaquo.python.android.AndroidPlatform
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.fsaint.androidagent.capabilities.camera.CameraCaptureRequest
@@ -160,9 +162,10 @@ class DarkLordApplication : Application() {
     private val telegramOwnerChat by lazy { TelegramOwnerChatStore(this) }
     private val browserTools by lazy { BrowserTools() }
     private val artifactStore by lazy { ArtifactStore(this) }
+    private val pythonRuntime: PythonRuntime by lazy { PythonRuntime(this, artifactStore) { session, call -> agentTools.execute(session, call) } }
     private val telegramPhotoSender by lazy { TelegramPhotoSender(telegramBotCredentials, artifactStore) { telegramOwnerChat.read() } }
     private val durableState by lazy { DurableStateRepository(database.durableStateDao()) }
-    private val agentTools by lazy {
+    private val agentTools: ScopedToolRouter by lazy {
         ScopedToolRouter(
             deviceCapability.toolHandlers() +
                 smsCapability.toolHandlers() +
@@ -177,6 +180,7 @@ class DarkLordApplication : Application() {
                 environmentCapability.toolHandlers() +
                 browserTools.handlers() +
                 artifactStore.handlers() +
+                pythonRuntime.handlers() +
                 telegramPhotoSender.handlers(),
             scopes,
         )
@@ -269,6 +273,7 @@ class DarkLordApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!Python.isStarted()) Python.start(AndroidPlatform(this))
         artifactStore.cleanup()
         applicationScope.launch {
             mcpCatalog += durableState.mcpConfigurations().map { it.id }

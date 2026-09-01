@@ -78,6 +78,12 @@ class OpenAiHttpClient(
                 "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"HTTPS URL to open\"}},\"required\":[\"url\"],\"additionalProperties\":false}"
             else if (it == "telegram.send_photo")
                 "{\"type\":\"object\",\"properties\":{\"artifactId\":{\"type\":\"string\"},\"chatId\":{\"type\":\"string\",\"description\":\"Optional. The app supplies the current authenticated Telegram chat automatically. Never ask the owner for a chat ID.\"}},\"required\":[\"artifactId\"],\"additionalProperties\":false}"
+            else if (it == "python.exec")
+                "{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"},\"arguments\":{\"type\":\"string\"}},\"required\":[\"code\"],\"additionalProperties\":false}"
+            else if (it == "python.save")
+                "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"}},\"required\":[\"name\",\"code\"],\"additionalProperties\":false}"
+            else if (it == "python.run" || it == "python.delete")
+                "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false}"
             else "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
             "{\"type\":\"function\",\"name\":\"${toolName(it)}\",\"description\":\"Phone capability: ${escape(it)}\",\"parameters\":$parameters}"
         }
