@@ -96,7 +96,12 @@ class ConversationHarness(
                         is ToolEffectReservation.Completed -> effect.result
                         ToolEffectReservation.Pending -> ToolResult<Any>(false, error = com.fsaint.androidagent.model.ToolError.FAILED, recoverable = true)
                         ToolEffectReservation.Reserved, null -> {
-                            val executed = tools.execute(request.session, response.call)
+                            // A capability must not be able to abort the whole conversation.
+                            // Return failures to the model so it can explain or recover.
+                            val executed = runCatching { tools.execute(request.session, response.call) }
+                                .getOrElse {
+                                    ToolResult(false, error = com.fsaint.androidagent.model.ToolError.FAILED, recoverable = true)
+                                }
                             toolEffects?.completeToolEffect(
                                 request.event.id,
                                 response.call,

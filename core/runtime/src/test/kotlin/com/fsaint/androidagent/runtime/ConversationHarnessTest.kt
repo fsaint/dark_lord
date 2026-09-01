@@ -129,6 +129,21 @@ class ConversationHarnessTest {
         val output = result.transcript.turns.filterIsInstance<ConversationTurn.ToolOutput>().single()
         assertEquals(com.fsaint.androidagent.model.ToolError.SCOPE_DENIED, output.result.error)
     }
+
+    @Test fun toolFailureIsReturnedToModelInsteadOfAbortingConversation() = runTest {
+        val model = ScriptedConversationModel(
+            ConversationResponse.Tool(ToolCall("device.battery")),
+            ConversationResponse.Final("The device tool failed."),
+        )
+        val harness = ConversationHarness(model, router("device.battery" to { error("device unavailable") }))
+
+        val result = harness.run(ConversationRequest(session, event, context, "check battery"))
+
+        assertEquals("The device tool failed.", result.response)
+        val output = result.transcript.turns.filterIsInstance<ConversationTurn.ToolOutput>().single()
+        assertEquals(com.fsaint.androidagent.model.ToolError.FAILED, output.result.error)
+        assertTrue(output.result.recoverable)
+    }
 }
 
 private fun router(vararg tools: Pair<String, suspend (ToolCall) -> ToolResult<*>>) = ScopedToolRouter(
