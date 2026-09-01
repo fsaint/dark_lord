@@ -18,6 +18,13 @@ enum class WifiState { ENABLED, DISABLED, UNAVAILABLE }
 
 data class BluetoothDeviceDescription(val address: String, val name: String?, val connected: Boolean)
 data class WifiStatus(val enabled: Boolean, val connected: Boolean, val ssid: String?)
+data class WifiNetworkDescription(val ssid: String, val bssid: String?, val frequencyMhz: Int, val signalDbm: Int)
+sealed interface WifiScanOutcome {
+    data class Success(val networks: List<WifiNetworkDescription>) : WifiScanOutcome
+    data object PermissionRequired : WifiScanOutcome
+    data object Unsupported : WifiScanOutcome
+    data object Disabled : WifiScanOutcome
+}
 
 sealed interface BluetoothDevicesOutcome {
     data class Success(val devices: List<BluetoothDeviceDescription>) : BluetoothDevicesOutcome
@@ -35,6 +42,7 @@ interface RadioAdapter {
     fun wifiState(): WifiState
     fun wifiStatus(): WifiStatus
     suspend fun bluetoothDevices(): BluetoothDevicesOutcome
+    suspend fun wifiScan(): WifiScanOutcome = WifiScanOutcome.Unsupported
     fun enableBluetooth(): RadioOperationOutcome
 }
 
@@ -85,9 +93,21 @@ class RadioCapability(private val adapter: RadioAdapter) : AgentCapability {
         "bluetooth.devices" to { bluetoothDevices().toAnyResult() },
         "bluetooth.enable" to { unsupported<Any>() },
         "wifi.status" to { wifiStatus().toAnyResult() },
-        "wifi.scan" to { unsupported<Any>() },
+        "wifi.scan" to { wifiScan().toAnyResult() },
         "wifi.connect" to { unsupported<Any>() },
     )
+
+    suspend fun wifiScan(): ToolResult<List<WifiNetworkDescription>> = when {
+        !adapter.supported() -> unsupported()
+        adapter.wifiState() == WifiState.UNAVAILABLE -> unsupported()
+        adapter.wifiState() == WifiState.DISABLED -> permissionRequired()
+        else -> when (val outcome = adapter.wifiScan()) {
+            is WifiScanOutcome.Success -> ToolResult(true, outcome.networks, verification = VerificationState.VERIFIED)
+            WifiScanOutcome.PermissionRequired -> permissionRequired()
+            WifiScanOutcome.Unsupported -> unsupported()
+            WifiScanOutcome.Disabled -> permissionRequired()
+        }
+    }
 }
 
 private val RADIO_TOOLS = listOf(

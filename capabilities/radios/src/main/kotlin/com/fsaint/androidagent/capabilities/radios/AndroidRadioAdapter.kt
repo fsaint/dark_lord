@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.annotation.SuppressLint
+import android.location.LocationManager
 
 class AndroidRadioAdapter(private val context: Context) : RadioAdapter {
     private val bluetoothManager: BluetoothManager? by lazy { context.getSystemService(BluetoothManager::class.java) }
@@ -50,6 +51,25 @@ class AndroidRadioAdapter(private val context: Context) : RadioAdapter {
                 },
             )
         }.getOrElse { BluetoothDevicesOutcome.PermissionRequired }
+    }
+
+    @SuppressLint("MissingPermission")
+    override suspend fun wifiScan(): WifiScanOutcome {
+        val manager = wifiManager ?: return WifiScanOutcome.Unsupported
+        if (!manager.isWifiEnabled) return WifiScanOutcome.Disabled
+        if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return WifiScanOutcome.PermissionRequired
+        val location = context.getSystemService(LocationManager::class.java)
+        if (location?.isLocationEnabled != true) return WifiScanOutcome.PermissionRequired
+        return try {
+            if (!manager.startScan()) return WifiScanOutcome.Unsupported
+            WifiScanOutcome.Success(manager.scanResults.map { result ->
+                WifiNetworkDescription(result.SSID, result.BSSID, result.frequency, result.level)
+            })
+        } catch (_: SecurityException) {
+            WifiScanOutcome.PermissionRequired
+        } catch (_: RuntimeException) {
+            WifiScanOutcome.Unsupported
+        }
     }
 
     override fun enableBluetooth(): RadioOperationOutcome =
