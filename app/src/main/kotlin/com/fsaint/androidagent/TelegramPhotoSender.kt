@@ -23,7 +23,9 @@ class TelegramPhotoSender(
             val artifactId = call.arguments["artifactId"].orEmpty()
             val chatId = call.arguments["chatId"]?.takeIf(String::isNotBlank) ?: ownerChatId()
             if (chatId.isNullOrBlank()) return@to ToolResult(false, error = ToolError.PERMISSION_REQUIRED)
-            val artifact = artifacts.read(artifactId) ?: return@to ToolResult(false, error = ToolError.NOT_FOUND)
+            val artifact = artifacts.read(artifactId).takeIf { artifactId.isNotBlank() }
+                ?: artifacts.latest("image/")
+                ?: return@to ToolResult(false, error = ToolError.NOT_FOUND)
             if (!artifact.first.mimeType.startsWith("image/")) return@to ToolResult(false, error = ToolError.SCOPE_DENIED)
             send(chatId, artifact.first.mimeType, artifact.second)
         },

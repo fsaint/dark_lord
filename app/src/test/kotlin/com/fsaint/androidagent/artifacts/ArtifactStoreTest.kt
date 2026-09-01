@@ -18,4 +18,12 @@ class ArtifactStoreTest {
     @Test fun rejectsUnsupportedTypes() {
         assertFailsWith<IllegalArgumentException> { ArtifactStore(Files.createTempDirectory("artifact-test").toFile()).store(byteArrayOf(1), "application/x-sh") }
     }
+
+    @Test fun findsLatestImageWhenModelOmitsArtifactId() {
+        val store = ArtifactStore(Files.createTempDirectory("artifact-test").toFile())
+        store.store(byteArrayOf(1), "text/plain")
+        val image = store.store(byteArrayOf(2), "image/jpeg")
+
+        assertEquals(image.id, store.latest("image/")!!.first.id)
+    }
 }

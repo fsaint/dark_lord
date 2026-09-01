@@ -44,6 +44,13 @@ class ArtifactStore(
 
     @Synchronized fun read(id: String): Pair<ArtifactMetadata, ByteArray>? = liveLocked(id)?.let { (info, file) -> info to file.readBytes() }
 
+    @Synchronized
+    fun latest(mimePrefix: String? = null): Pair<ArtifactMetadata, ByteArray>? = metadata.values
+        .asSequence()
+        .filter { mimePrefix == null || it.mimeType.startsWith(mimePrefix) }
+        .maxByOrNull { it.createdAtEpochMs }
+        ?.let { info -> read(info.id) }
+
     @Synchronized fun cleanup() { cleanupLocked(clock()) }
 
     fun handlers(): Map<String, suspend (ToolCall) -> ToolResult<Any>> = mapOf(
