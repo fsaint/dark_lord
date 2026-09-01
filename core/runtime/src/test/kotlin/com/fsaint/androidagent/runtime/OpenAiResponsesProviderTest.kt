@@ -61,6 +61,20 @@ class OpenAiResponsesProviderTest {
     }
 
     @Test
+    fun parsesToolArgumentsOnAndroidCompatibleRegex() = runTest {
+        val client = OpenAiHttpClient(FakeTransport {
+            OpenAiHttpResponse(200, "{\"tool\":\"telegram_send_photo\",\"arguments\":{\"artifactId\":\"artifact_123\"}}")
+        }, StaticApiKey("sk-test"))
+
+        val response = client.respond(ConversationRequest(session, event, AgentContext(setOf("telegram.send_photo"), emptyMap()), "send it"))
+
+        assertEquals(
+            ConversationResponse.Tool(com.fsaint.androidagent.model.ToolCall("telegram.send_photo", mapOf("artifactId" to "artifact_123"))),
+            response,
+        )
+    }
+
+    @Test
     fun rejectsInsecureOrOversizedResponsesWithoutLeakingKey() = runTest {
         val provider = OpenAiResponsesProvider(OpenAiHttpClient(FakeTransport { OpenAiHttpResponse(200, "x".repeat(100)) }, StaticApiKey("sk-secret"), maxBodyBytes = 32))
         val result = runCatching { provider.plan(session, event, context) }

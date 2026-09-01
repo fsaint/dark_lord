@@ -92,7 +92,7 @@ class OpenAiHttpClient(
 
     private fun field(json: String, name: String): String? = Regex("\\\"$name\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"").find(json)?.groupValues?.get(1)
     private fun arguments(json: String): Map<String, String> {
-        val body = Regex("\\\"arguments\\\"\\s*:\\s*\\{([^}]*)}").find(json)?.groupValues?.get(1) ?: return emptyMap()
+        val body = Regex("\\\"arguments\\\"\\s*:\\s*\\{([^}]*)\\}").find(json)?.groupValues?.get(1) ?: return emptyMap()
         return Regex("\\\"([^\\\"]+)\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"").findAll(body)
             .associate { it.groupValues[1] to it.groupValues[2].replace("\\\\\"", "\"").replace("\\\\\\\\", "\\\\") }
     }
