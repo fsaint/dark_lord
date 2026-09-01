@@ -48,7 +48,7 @@ class AgentRuntime(
                     ToolError.PERMISSION_REQUIRED -> "The owner API key was rejected by OpenAI${providerError.detail?.let { " ($it)" }.orEmpty()}."
                     ToolError.NETWORK_ERROR -> "The conversational model request failed${providerError.detail?.let { " ($it)" }.orEmpty()}."
                     ToolError.NOT_FOUND -> "The conversational model returned an unreadable response."
-                    else -> "The conversational model is unavailable right now."
+                    else -> "The conversational model is unavailable right now (${it.diagnosticMessage()})."
                 }
                 deliverAndComplete(event, session.channel, recipient, message)
                 return
@@ -107,4 +107,11 @@ class AgentRuntime(
 
     private fun auditRecord(event: AgentEvent, session: ScopedAgentSession, tool: String, authorization: AuthorizationDecision, verification: VerificationState, result: String) =
         AuditRecord("${event.id}:$tool", event.occurredAtEpochMs, event.id, session.principalId, session.scopeId, session.id, tool = tool, authorization = authorization, verification = verification, result = result)
+
+    private fun Throwable.diagnosticMessage(): String = generateSequence(this) { it.cause }
+        .take(3)
+        .joinToString(" <- ") { error ->
+            val detail = error.message.orEmpty().replace(Regex("[\\r\\n\\t]+"), " ").take(240)
+            error::class.simpleName.orEmpty() + if (detail.isBlank()) "" else ": $detail"
+        }
 }
