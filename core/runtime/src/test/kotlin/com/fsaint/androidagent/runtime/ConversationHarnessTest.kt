@@ -144,6 +144,23 @@ class ConversationHarnessTest {
         assertEquals(com.fsaint.androidagent.model.ToolError.FAILED, output.result.error)
         assertTrue(output.result.recoverable)
     }
+
+    @Test fun telegramPhotoToolReceivesCurrentChatAsRecipient() = runTest {
+        var recipient: String? = null
+        val model = ScriptedConversationModel(
+            ConversationResponse.Tool(ToolCall("telegram.send_photo", mapOf("artifactId" to "artifact_1"))),
+            ConversationResponse.Final("sent"),
+        )
+        val telegramSession = ScopeRegistry().sessionFor(Principal("owner", null, PrincipalRole.OWNER), "TELEGRAM")
+        val harness = ConversationHarness(model, router("telegram.send_photo" to { call ->
+            recipient = call.arguments["chatId"]
+            ToolResult(true, "ok", verification = VerificationState.VERIFIED)
+        }))
+
+        harness.run(ConversationRequest(telegramSession, event.copy(source = "12345", payload = mapOf("sender" to "12345")), context, "send it"))
+
+        assertEquals("12345", recipient)
+    }
 }
 
 private fun router(vararg tools: Pair<String, suspend (ToolCall) -> ToolResult<*>>) = ScopedToolRouter(

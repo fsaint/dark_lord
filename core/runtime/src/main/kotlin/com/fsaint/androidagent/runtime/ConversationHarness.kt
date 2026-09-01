@@ -91,20 +91,21 @@ class ConversationHarness(
                 }
                 is ConversationResponse.Tool -> {
                     calls += response.call
+                    val executionCall = response.call.withConversationRecipient(request)
                     val turn = transcript.nextTurn
-                    val result: ToolResult<Any> = when (val effect = toolEffects?.reserveToolEffect(request.event.id, response.call, turn)) {
+                    val result: ToolResult<Any> = when (val effect = toolEffects?.reserveToolEffect(request.event.id, executionCall, turn)) {
                         is ToolEffectReservation.Completed -> effect.result
                         ToolEffectReservation.Pending -> ToolResult<Any>(false, error = com.fsaint.androidagent.model.ToolError.FAILED, recoverable = true)
                         ToolEffectReservation.Reserved, null -> {
                             // A capability must not be able to abort the whole conversation.
                             // Return failures to the model so it can explain or recover.
-                            val executed = runCatching { tools.execute(request.session, response.call) }
+                            val executed = runCatching { tools.execute(request.session, executionCall) }
                                 .getOrElse {
                                     ToolResult(false, error = com.fsaint.androidagent.model.ToolError.FAILED, recoverable = true)
                                 }
                             toolEffects?.completeToolEffect(
                                 request.event.id,
-                                response.call,
+                                executionCall,
                                 turn,
                                 executed,
                             )
@@ -122,4 +123,12 @@ class ConversationHarness(
     }
 
     private companion object { const val MAX_TURNS = 8 }
+}
+
+private fun ToolCall.withConversationRecipient(request: ConversationRequest): ToolCall {
+    if (name != "telegram.send_photo" || request.session.channel.uppercase() != "TELEGRAM") return this
+    val recipient = request.event.payload["sender"]?.takeIf(String::isNotBlank) ?: request.event.source
+    return if (recipient.isBlank() || arguments["chatId"].isNullOrBlank()) {
+        copy(arguments = arguments + ("chatId" to recipient))
+    } else this
 }
