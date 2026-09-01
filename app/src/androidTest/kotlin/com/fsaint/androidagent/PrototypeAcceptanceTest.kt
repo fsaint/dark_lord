@@ -53,6 +53,11 @@ class PrototypeAcceptanceTest {
         assertNotNull(admin.metaData)
         assertNotNull(pm.getServiceInfo(ComponentName(packageName, "com.fsaint.androidagent.oem.samsungflip3.AgentVoiceInteractionService"), 0))
         assertNotNull(pm.getServiceInfo(ComponentName(packageName, "com.fsaint.androidagent.communications.RespondViaMessageService"), 0))
+        val voiceCapture = pm.getServiceInfo(ComponentName(packageName, "com.fsaint.androidagent.voice.VoiceCaptureService"), 0)
+        assertTrue(
+            "push-to-talk capture must run as a microphone foreground service",
+            voiceCapture.foregroundServiceType and android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE != 0,
+        )
     }
 
     @Test fun diagnosticsSurfaceIsReachableFromAssistantSurface() {

@@ -84,9 +84,15 @@ import com.fsaint.androidagent.oem.samsungflip3.Flip3FormFactorCapability
 import com.fsaint.androidagent.ui.CoverAssistantScreen
 import com.fsaint.androidagent.ui.CallScreenActivity
 import com.fsaint.androidagent.ui.CommunicationsAccessStatus
-import com.fsaint.androidagent.ui.OpenAssistantScreen
-import com.fsaint.androidagent.voice.SpeechTranscriptBus
+import com.fsaint.androidagent.ui.OpenAssistantSurface
+import com.fsaint.androidagent.voice.AndroidSpeechRecognizerPort
+import com.fsaint.androidagent.voice.AndroidTtsSpeaker
+import com.fsaint.androidagent.voice.PushToTalkController
+import com.fsaint.androidagent.voice.TurnDispatcher
+import com.fsaint.androidagent.voice.VoiceResponder
 import com.fsaint.androidagent.artifacts.ArtifactStore
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.fsaint.androidagent.capabilities.camera.CameraCaptureRequest
 import com.fsaint.androidagent.capabilities.camera.CameraCaptureOutcome
 import kotlinx.coroutines.CoroutineScope
@@ -97,7 +103,6 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
-import android.speech.tts.TextToSpeech
 
 /** Application lifecycle adapter that preserves Telegram's durable shutdown boundary. */
 internal class TelegramUpdatesLifecycle(
@@ -209,17 +214,28 @@ class DarkLordApplication : Application() {
     private val auditStore by lazy { AuditRepository(database.auditRecordDao()) }
     val ownerProvisioning by lazy { OwnerProvisioningService(principals, auditStore) }
     private val phoneNumbers by lazy { AndroidPhoneNumberNormalizer(this) }
-    private val textToSpeech by lazy { TextToSpeech(this) { } }
-    private val replies by lazy {
-        object : com.fsaint.androidagent.runtime.ReplySender {
-            override suspend fun send(channel: String, recipient: String, text: String) {
-                when (channel) {
-                    "VOICE" -> textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, null, "dark-lord-response")
-                    "TELEGRAM" -> telegramReplies.send(channel, recipient, text)
-                    else -> smsCapability.replySender.send(recipient, text)
+    private val speaker by lazy { AndroidTtsSpeaker(this) }
+    /** One push-to-talk turn at a time; the assistant session and the capture service drive it. */
+    val voiceTurn: PushToTalkController by lazy {
+        PushToTalkController(
+            recognizer = AndroidSpeechRecognizerPort(this) { voiceTurn },
+            turns = TurnDispatcher { transcript -> dispatchVoiceTranscript(transcript) },
+            speaker = speaker,
+            scope = applicationScope,
+        )
+    }
+    private val replies: com.fsaint.androidagent.runtime.ReplySender by lazy {
+        VoiceResponder(
+            voiceTurn,
+            fallback = object : com.fsaint.androidagent.runtime.ReplySender {
+                override suspend fun send(channel: String, recipient: String, text: String) {
+                    when (channel) {
+                        "TELEGRAM" -> telegramReplies.send(channel, recipient, text)
+                        else -> smsCapability.replySender.send(recipient, text)
+                    }
                 }
-            }
-        }
+            },
+        )
     }
     private val escalationService by lazy {
         EscalationService(EscalationRepository(database.durableStateDao()), replies) {
@@ -265,12 +281,8 @@ class DarkLordApplication : Application() {
         applicationScope.launch {
             smsCapability.events().collect { event -> dispatch(event, "SMS") }
         }
-        applicationScope.launch {
-            SpeechTranscriptBus.transcripts.collect { transcript ->
-                val owner = principals.owner() ?: return@collect
-                dispatch(AgentEvent("voice:${System.currentTimeMillis()}", "voice.transcript", "voice", System.currentTimeMillis(), mapOf("body" to transcript)), "VOICE")
-            }
-        }
+        // Construct the speech recognizer and text-to-speech engine on the main thread.
+        voiceTurn
         AgentNotificationListenerServiceDependencies.configure(NotificationEventSink { event -> dispatch(event, "NOTIFICATION") })
         AgentInCallServiceDependencies.configure(
             eventSink = CallEventSink { event -> dispatch(event, "CALL") },
@@ -283,12 +295,21 @@ class DarkLordApplication : Application() {
             },
         )
         AgentSurfaceRegistry.openContent = {
-            OpenAssistantScreen(
-                onRequestAssistantRole = {},
-                onRequestCapabilityPermissions = {},
-            )
+            val state by voiceTurn.state.collectAsState()
+            OpenAssistantSurface(state, onTap = voiceTurn::tapToSend)
         }
-        AgentSurfaceRegistry.coverContent = { CoverAssistantScreen() }
+        AgentSurfaceRegistry.coverContent = {
+            val state by voiceTurn.state.collectAsState()
+            CoverAssistantScreen(state, onTap = voiceTurn::tapToSend)
+        }
+    }
+
+    /** Runs a spoken request through the same runtime, tools, MCP servers, and skills as the owner's chat. */
+    private suspend fun dispatchVoiceTranscript(transcript: String): Boolean {
+        principals.owner() ?: return false
+        val now = System.currentTimeMillis()
+        dispatch(AgentEvent("voice:$now", "voice.transcript", "voice", now, mapOf("body" to transcript)), "VOICE")
+        return true
     }
 
     private fun captureArtifactHandler(): suspend (com.fsaint.androidagent.model.ToolCall) -> com.fsaint.androidagent.model.ToolResult<Any> = { call ->
@@ -325,6 +346,7 @@ class DarkLordApplication : Application() {
     /** Cancels and joins all application work after Telegram's polling boundary is closed. */
     suspend fun shutdown() {
         runtimeCoordinator.stop()
+        speaker.shutdown()
         applicationSupervisor.cancelAndJoin()
     }
 

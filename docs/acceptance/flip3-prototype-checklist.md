@@ -42,7 +42,7 @@ Initial disposition is `NOT_RUN` until a record above is attached. Automated row
 | 15 | Receive call | Telephony instrumentation + carrier call | NOT_RUN |
 | 16 | Resolve caller scope | Policy/telephony unit tests + caller device check | NOT_RUN |
 | 17 | Answer, reject, and hang up | Telephony capability tests + carrier call | NOT_RUN |
-| 18 | Operate with screen off | Voice/foreground-service manual device check | NOT_RUN |
+| 18 | Operate with screen off | Stage 13 side-key push-to-talk manual device check (cover surface + spoken reply) | NOT_RUN |
 | 19 | Recover after reboot | `BootRecoveryTest` + physical reboot and WorkManager observation | NOT_RUN |
 | 20 | Connect external MCP | MCP unit tests + configured HTTPS endpoint | NOT_RUN |
 | 21 | Execute skill | Skills unit tests + approved declarative skill device check | NOT_RUN |

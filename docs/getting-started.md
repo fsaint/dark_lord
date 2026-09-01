@@ -25,7 +25,7 @@ For the signed prototype artifact, use `./gradlew :app:assembleRelease` and foll
 
 1. Launch **Dark Lord**.
 2. Grant microphone, camera, SMS, phone, and notification permissions when prompted.
-3. Set Dark Lord as the Assistant from the Side-button/Assistant settings.
+3. Tap **Make Dark Lord your Assistant** and accept the role prompt. Then open Settings › Advanced features › Side button › **Press and hold** and choose the digital assistant so a long press of the side key opens Dark Lord. Confirm with `adb shell settings get secure assistant`.
 4. Open **Communications settings**, provision your owner number, and grant SMS/dialer roles as needed.
 5. Enable notification access for Dark Lord.
 6. Return to the main screen and enter the OpenAI key in **OpenAI API key (owner only)**, then tap **Save model key**. The key is encrypted with Android Keystore and is not sent through SMS or diagnostics.
@@ -37,7 +37,7 @@ Detailed reset and Device Owner procedures are in the [device provisioning guide
 
 Send an SMS to the device, or invoke Dark Lord with the Side button, and ask a simple question such as `What is my battery level?` The model receives only the tools allowed by the active principal's scope. It may call a device tool and then sends one final response.
 
-To test voice, start voice capture, speak the same request, and confirm the response is spoken aloud. If no key is configured, Dark Lord returns a setup message instead of crashing.
+To test voice, hold the side key, speak the same request, and release. Dark Lord listens as soon as the assistant surface appears, finalizes when you stop talking (or when you tap the surface), and speaks the reply while showing it on the cover display when folded or on the main screen when open. Android does not report the side-key release to apps, so the end of your sentence is what sends the request. If no key is configured, Dark Lord returns a setup message instead of crashing. Use the [Stage 13 push-to-talk checklist](device-test/stage-13-side-key-push-to-talk.md) for the full sequence.
 
 ## Add an MCP server
 
