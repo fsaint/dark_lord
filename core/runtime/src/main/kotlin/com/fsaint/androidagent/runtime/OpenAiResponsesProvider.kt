@@ -25,12 +25,12 @@ class OpenAiHttpClient(
 ) : OpenAiResponsesTransport, ConversationModel {
     override suspend fun plan(session: ScopedAgentSession, event: AgentEvent, context: AgentContext): PlannedAction {
         if (!endpoint.startsWith("https://") || timeoutMillis !in 1..120_000) throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NETWORK_ERROR)
-        val body = requestBody(event, context)
+        val body = requestBody(event, context, session.channel)
         return parsePlan(request(body))
     }
 
     override suspend fun respond(request: ConversationRequest): ConversationResponse {
-        val body = requestBody(request.event, request.context, request.userText, request.transcript)
+        val body = requestBody(request.event, request.context, request.session.channel, request.userText, request.transcript)
         return parseConversation(request(body), request.context)
     }
 
@@ -71,13 +71,13 @@ class OpenAiHttpClient(
         return final?.let(ConversationResponse::Final) ?: throw OpenAiProviderException(com.fsaint.androidagent.model.ToolError.NOT_FOUND)
     }
 
-    private fun requestBody(event: AgentEvent, context: AgentContext, userText: String = event.payload["body"].orEmpty(), transcript: ConversationTranscript? = null): String {
+    private fun requestBody(event: AgentEvent, context: AgentContext, channel: String, userText: String = event.payload["body"].orEmpty(), transcript: ConversationTranscript? = null): String {
         val history = transcript?.turns.orEmpty().joinToString("\\n") { it.toString() }
         val tools = context.resources.joinToString(",") {
             val parameters = if (it == "browser.open")
                 "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":\"string\",\"description\":\"HTTPS URL to open\"}},\"required\":[\"url\"],\"additionalProperties\":false}"
             else if (it == "telegram.send_photo")
-                "{\"type\":\"object\",\"properties\":{\"artifactId\":{\"type\":\"string\"},\"chatId\":{\"type\":\"string\"}},\"required\":[\"artifactId\"],\"additionalProperties\":false}"
+                "{\"type\":\"object\",\"properties\":{\"artifactId\":{\"type\":\"string\"},\"chatId\":{\"type\":\"string\",\"description\":\"Optional. The app supplies the current authenticated Telegram chat automatically. Never ask the owner for a chat ID.\"}},\"required\":[\"artifactId\"],\"additionalProperties\":false}"
             else "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
             "{\"type\":\"function\",\"name\":\"${toolName(it)}\",\"description\":\"Phone capability: ${escape(it)}\",\"parameters\":$parameters}"
         }
@@ -86,6 +86,10 @@ class OpenAiHttpClient(
             if (context.mcpResources.isNotEmpty()) append(". Available MCP servers: ").append(context.mcpResources.sorted().joinToString(", "))
             if (context.skillResources.isNotEmpty()) append(". Available skills: ").append(context.skillResources.sorted().joinToString(", "))
             append('.')
+            append(" Conversation channel: ").append(channel).append(". Use the current channel for replies and media; do not ask the owner to identify it.")
+            event.payload["sender"]?.takeIf(String::isNotBlank)?.let { sender ->
+                append(" Chat id: ").append(sender).append(". Replies and photos go to this chat automatically; never ask the user for it.")
+            }
         }
         return "{\"model\":\"gpt-4o-mini\",\"input\":\"${escape(inventory)}\\n${escape(userText)}\\n${escape(history)}\",\"tools\":[$tools]}"
     }
