@@ -23,6 +23,9 @@ import kotlinx.coroutines.runBlocking
 class AgentRuntimeService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val foreground by lazy { AndroidAgentRuntimeForegroundController(this) }
+    private val mediaLifecycle by lazy {
+        MediaForegroundLifecycle(foreground) { BootRecoveryDependencies.coordinator.isRunning }
+    }
     private val handler by lazy {
         AgentRuntimeServiceCommandHandler(
             coordinator = BootRecoveryDependencies.coordinator,
@@ -43,11 +46,18 @@ class AgentRuntimeService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
         when {
             intent?.action == ACTION_STOP_MEDIA -> {
-                intent.getStringExtra(EXTRA_MEDIA_JOB_ID)?.let { jobId -> serviceScope.launch { (application as? DarkLordApplication)?.stopBackgroundMediaJob(jobId); foreground.stop() } }
+                intent.getStringExtra(EXTRA_MEDIA_JOB_ID)?.let { jobId ->
+                    serviceScope.launch {
+                        (application as? DarkLordApplication)?.stopBackgroundMediaJob(jobId)
+                        mediaLifecycle.stop()
+                    }
+                }
                 START_NOT_STICKY
             }
             intent?.getStringExtra(EXTRA_MEDIA_JOB_ID) != null -> {
-                foreground.startMedia(intent.getStringExtra(EXTRA_MEDIA_JOB_ID)!!)
+                val jobId = intent.getStringExtra(EXTRA_MEDIA_JOB_ID)!!
+                mediaLifecycle.start(jobId)
+                (application as? DarkLordApplication)?.acknowledgeBackgroundMediaForeground(jobId)
                 START_NOT_STICKY
             }
             else -> handler.handle(intent, startId)
@@ -168,6 +178,16 @@ internal interface AgentRuntimeForegroundController {
     fun start()
     fun stop()
     fun startMedia(jobId: String)
+    fun stopMedia(keepRuntimeForeground: Boolean)
+}
+
+/** Keeps the runtime foreground ownership independent from a bounded media session. */
+internal class MediaForegroundLifecycle(
+    private val foreground: AgentRuntimeForegroundController,
+    private val runtimeIsRunning: () -> Boolean,
+) {
+    fun start(jobId: String) = foreground.startMedia(jobId)
+    fun stop() = foreground.stopMedia(runtimeIsRunning())
 }
 
 private class AndroidAgentRuntimeForegroundController(
@@ -201,6 +221,10 @@ private class AndroidAgentRuntimeForegroundController(
             notifications.buildMedia(jobId),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
         )
+    }
+
+    override fun stopMedia(keepRuntimeForeground: Boolean) {
+        if (keepRuntimeForeground) start() else stop()
     }
 }
 

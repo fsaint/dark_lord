@@ -23,6 +23,8 @@ import com.fsaint.androidagent.capabilities.camera.CameraLensFacing
 import com.fsaint.androidagent.capabilities.camera.CameraListOutcome
 import com.fsaint.androidagent.capabilities.camera.CameraOperationOutcome
 import com.fsaint.androidagent.capabilities.camera.CameraPermission
+import com.fsaint.androidagent.capabilities.camera.CameraVideoStopOutcome
+import com.fsaint.androidagent.capabilities.camera.VideoStartRequest
 import com.fsaint.androidagent.diagnostics.DiagnosticsRepository
 import com.fsaint.androidagent.ui.DebugScreen
 import com.fsaint.androidagent.ui.OpenAssistantScreen
@@ -104,5 +106,8 @@ class PrototypeAcceptanceTest {
         override suspend fun list(): CameraListOutcome = CameraListOutcome.PermissionRequired
         override suspend fun capture(request: CameraCaptureRequest): CameraCaptureOutcome = CameraCaptureOutcome.PermissionRequired
         override suspend fun setTorch(cameraId: String, enabled: Boolean) = CameraOperationOutcome.PermissionRequired
+        override suspend fun startVideo(request: VideoStartRequest) = CameraOperationOutcome.PermissionRequired
+        override suspend fun stopVideo() = CameraVideoStopOutcome.PermissionRequired
+        override fun recordingVideo() = false
     }
 }

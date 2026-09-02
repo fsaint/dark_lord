@@ -19,6 +19,7 @@ import java.nio.ByteOrder
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
@@ -26,6 +27,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withTimeout
 
 enum class BackgroundJobStatus { STARTING, RUNNING, STOPPING, COMPLETED, FAILED, CANCELLED, INTERRUPTED }
 
@@ -42,7 +44,30 @@ data class BackgroundJob(
 )
 
 interface BackgroundJobStateStore { fun load(): List<BackgroundJob>; fun save(job: BackgroundJob) }
-interface MediaJobForeground { fun start(jobId: String); fun stop(jobId: String) }
+/** Owns the typed foreground-service transition required before recording can touch media. */
+interface MediaJobForeground { suspend fun start(jobId: String); fun stop(jobId: String) }
+
+/** One process-wide lease shared by background jobs and the direct media controls. */
+interface MediaResourceLease {
+    fun tryAcquire(owner: String): Boolean
+    fun release(owner: String)
+    fun isOwner(owner: String): Boolean
+}
+
+class MediaResourceCoordinator : MediaResourceLease {
+    private val lock = Any()
+    private var owner: String? = null
+
+    override fun tryAcquire(owner: String): Boolean = synchronized(lock) {
+        if (this.owner != null) false else { this.owner = owner; true }
+    }
+
+    override fun release(owner: String) = synchronized(lock) {
+        if (this.owner == owner) this.owner = null
+    }
+
+    override fun isOwner(owner: String): Boolean = synchronized(lock) { this.owner == owner }
+}
 
 internal class SharedPreferencesBackgroundJobStateStore(context: Context) : BackgroundJobStateStore {
     private val preferences = context.getSharedPreferences("background_jobs", Context.MODE_PRIVATE)
@@ -56,7 +81,20 @@ internal class SharedPreferencesBackgroundJobStateStore(context: Context) : Back
 }
 
 internal class AndroidMediaJobForeground(private val context: Context) : MediaJobForeground {
-    override fun start(jobId: String) { ContextCompat.startForegroundService(context, AgentRuntimeService.mediaIntent(context, jobId)) }
+    private val acknowledgements = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
+
+    override suspend fun start(jobId: String) {
+        val acknowledgement = CompletableDeferred<Unit>()
+        check(acknowledgements.putIfAbsent(jobId, acknowledgement) == null) { "Media foreground already requested for $jobId" }
+        try {
+            ContextCompat.startForegroundService(context, AgentRuntimeService.mediaIntent(context, jobId))
+            withTimeout(5_000) { acknowledgement.await() }
+        } finally {
+            acknowledgements.remove(jobId, acknowledgement)
+        }
+    }
+
+    fun acknowledge(jobId: String) { acknowledgements[jobId]?.complete(Unit) }
     override fun stop(jobId: String) { context.startService(AgentRuntimeService.stopMediaIntent(context, jobId)) }
 }
 
@@ -69,6 +107,7 @@ class BackgroundJobManager(
     private val stopVideo: suspend () -> ToolResult<VideoClip>,
     private val stateStore: BackgroundJobStateStore,
     private val mediaForeground: MediaJobForeground,
+    private val mediaLease: MediaResourceLease,
     private val pythonExecutor: (suspend (Map<String, String>) -> ToolResult<Any>)? = null,
 ) {
     private val jobs = ConcurrentHashMap<String, BackgroundJob>()
@@ -98,6 +137,7 @@ class BackgroundJobManager(
         synchronized(lock) {
             if (type in EXCLUSIVE_TYPES && jobs.values.any { it.type in EXCLUSIVE_TYPES && it.status in ACTIVE }) return ToolResult(false, error = ToolError.DEVICE_BUSY)
             val id = "job_${UUID.randomUUID()}"
+            if (type in EXCLUSIVE_TYPES && !mediaLease.tryAcquire(id)) return ToolResult(false, error = ToolError.DEVICE_BUSY)
             val job = BackgroundJob(id, type, BackgroundJobStatus.STARTING, now(), now(), call.arguments - "type")
             jobs[id] = job
             stateStore.save(job)
@@ -122,7 +162,7 @@ class BackgroundJobManager(
 
     suspend fun cancel(id: String?): ToolResult<Any> = id?.let(jobs::get)?.let { target ->
         runners[target.id]?.cancelAndJoin()
-        val cancelled = target.copy(status = BackgroundJobStatus.CANCELLED, updatedAtEpochMs = now())
+        val cancelled = (jobs[target.id] ?: target).copy(status = BackgroundJobStatus.CANCELLED, updatedAtEpochMs = now())
         update(cancelled)
         ToolResult(true, cancelled.toPayload(), verification = VerificationState.VERIFIED)
     } ?: ToolResult(false, error = ToolError.NOT_FOUND)
@@ -158,7 +198,11 @@ class BackgroundJobManager(
             }
         } catch (t: Throwable) {
             update(jobs[id]!!.copy(status = BackgroundJobStatus.FAILED, error = t.message ?: t::class.simpleName))
-        } finally { if (initial.type == "video") mediaForeground.stop(initial.id); runners.remove(id) }
+        } finally {
+            if (initial.type == "video") mediaForeground.stop(initial.id)
+            if (initial.type in EXCLUSIVE_TYPES) mediaLease.release(initial.id)
+            runners.remove(id)
+        }
     }
 
     private suspend fun runVideo(job: BackgroundJob) {

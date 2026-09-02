@@ -16,6 +16,7 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 
@@ -58,6 +59,46 @@ class BackgroundJobManagerTest {
     }
 
     @Test
+    fun cancellingVideoKeepsTheFinalizedMp4Artifact() = runTest {
+        val output = Files.createTempFile("video-cancel", ".mp4").toFile().apply { writeBytes(byteArrayOf(4, 5, 6)) }
+        val manager = manager(
+            scope = backgroundScope,
+            startVideo = { ToolResult(success = true, payload = Unit) },
+            stopVideo = { ToolResult(success = true, payload = VideoClip(output, "video/mp4", 1280, 720, 15)) },
+        )
+        val started = manager.start(ToolCall("jobs.start", mapOf("type" to "video", "durationMs" to "600000")))
+        runCurrent()
+
+        val cancelled = manager.cancel(jobId(started))
+
+        val payload = cancelled.payload as Map<*, *>
+        assertEquals(BackgroundJobStatus.CANCELLED.name, payload["status"])
+        assertEquals("video/mp4", (payload["artifact"] as Map<*, *>)["mimeType"])
+    }
+
+    @Test
+    fun videoCameraStartWaitsForForegroundServiceAcknowledgement() = runTest {
+        val acknowledgement = CompletableDeferred<Unit>()
+        var startCalls = 0
+        val manager = manager(
+            scope = backgroundScope,
+            foreground = object : MediaJobForeground {
+                override suspend fun start(jobId: String) = acknowledgement.await()
+                override fun stop(jobId: String) = Unit
+            },
+            startVideo = { startCalls += 1; ToolResult(success = true, payload = Unit) },
+        )
+
+        manager.start(ToolCall("jobs.start", mapOf("type" to "video", "durationMs" to "600000")))
+        runCurrent()
+        assertEquals(0, startCalls)
+
+        acknowledgement.complete(Unit)
+        runCurrent()
+        assertEquals(1, startCalls)
+    }
+
+    @Test
     fun activeVideoPreventsMicrophoneJobFromStarting() = runTest {
         val manager = manager(
             scope = backgroundScope,
@@ -68,6 +109,47 @@ class BackgroundJobManagerTest {
         val microphone = manager.start(ToolCall("jobs.start", mapOf("type" to "audio")))
 
         assertEquals(ToolError.DEVICE_BUSY, microphone.error)
+    }
+
+    @Test
+    fun mediaJobRejectsStartWhileDirectMediaHandlerOwnsSharedLease() = runTest {
+        val lease = MediaResourceCoordinator()
+        val controls = DirectMediaControlHandlers(
+            lease = lease,
+            onStartVideo = { ToolResult(success = true, payload = Unit) },
+            onStopVideo = { ToolResult(false, error = ToolError.APP_NOT_RUNNING) },
+            onStartMicrophone = { ToolResult(success = true, payload = Unit) },
+            onStopMicrophone = { ToolResult<Any>(false, error = ToolError.APP_NOT_RUNNING) },
+            onRecordMicrophone = { ToolResult(false, error = ToolError.APP_NOT_RUNNING) },
+        )
+        val manager = manager(scope = backgroundScope, lease = lease)
+
+        val microphone = controls.handlers().getValue("microphone.start")(ToolCall("microphone.start"))
+        val video = manager.start(ToolCall("jobs.start", mapOf("type" to "video")))
+
+        assertEquals(true, microphone.success)
+        assertEquals(ToolError.DEVICE_BUSY, video.error)
+    }
+
+    @Test
+    fun idleDirectMediaStopDelegatesInsteadOfClaimingDeviceBusy() = runTest {
+        var stopCalls = 0
+        val controls = DirectMediaControlHandlers(
+            lease = MediaResourceCoordinator(),
+            onStartVideo = { ToolResult(success = true, payload = Unit) },
+            onStopVideo = {
+                stopCalls += 1
+                ToolResult(false, error = ToolError.APP_NOT_RUNNING)
+            },
+            onStartMicrophone = { ToolResult(success = true, payload = Unit) },
+            onStopMicrophone = { ToolResult<Any>(false, error = ToolError.APP_NOT_RUNNING) },
+            onRecordMicrophone = { ToolResult(false, error = ToolError.APP_NOT_RUNNING) },
+        )
+
+        val stopped = controls.handlers().getValue("camera.stopVideo")(ToolCall("camera.stopVideo"))
+
+        assertEquals(1, stopCalls)
+        assertEquals(ToolError.APP_NOT_RUNNING, stopped.error)
     }
 
     @Test
@@ -91,8 +173,9 @@ class BackgroundJobManagerTest {
 
     private fun manager(
         scope: kotlinx.coroutines.CoroutineScope,
-        foreground: FakeMediaForeground = FakeMediaForeground(),
+        foreground: MediaJobForeground = FakeMediaForeground(),
         store: MemoryJobStore = MemoryJobStore(),
+        lease: MediaResourceLease = MediaResourceCoordinator(),
         startVideo: suspend (com.fsaint.androidagent.capabilities.camera.VideoStartRequest) -> ToolResult<Unit> = { ToolResult(false, error = ToolError.UNSUPPORTED) },
         stopVideo: suspend () -> ToolResult<VideoClip> = { ToolResult(false, error = ToolError.APP_NOT_RUNNING) },
     ) = BackgroundJobManager(
@@ -103,6 +186,7 @@ class BackgroundJobManagerTest {
         stopVideo = stopVideo,
         stateStore = store,
         mediaForeground = foreground,
+        mediaLease = lease,
     )
 
     private fun jobId(result: ToolResult<Any>): String = (result.payload as Map<*, *>)["jobId"] as String
@@ -113,7 +197,7 @@ class BackgroundJobManagerTest {
     private class FakeMediaForeground : MediaJobForeground {
         val started = mutableListOf<String>()
         val stopped = mutableListOf<String>()
-        override fun start(jobId: String) { started += jobId }
+        override suspend fun start(jobId: String) { started += jobId }
         override fun stop(jobId: String) { stopped += jobId }
     }
 

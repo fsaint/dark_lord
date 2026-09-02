@@ -165,6 +165,19 @@ class AgentRuntimeServiceTest {
     }
 
     @Test
+    fun finishingMediaRestoresRuntimeForegroundWhenRuntimeIsStillRunning() {
+        val events = mutableListOf<String>()
+        val lifecycle = MediaForegroundLifecycle(
+            foreground = RecordingForegroundController(events),
+            runtimeIsRunning = { true },
+        )
+
+        lifecycle.stop()
+
+        assertEquals(listOf("foreground.stopMedia:true"), events)
+    }
+
+    @Test
     fun notificationIsOngoingWithStopAction() {
         val factory = AgentRuntimeNotificationFactory(context)
 
@@ -295,6 +308,14 @@ private class RecordingForegroundController(
     override fun stop() {
         stops += 1
         events += "foreground.stop"
+    }
+
+    override fun startMedia(jobId: String) {
+        events += "foreground.startMedia:$jobId"
+    }
+
+    override fun stopMedia(keepRuntimeForeground: Boolean) {
+        events += "foreground.stopMedia:$keepRuntimeForeground"
     }
 }
 

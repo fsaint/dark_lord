@@ -53,6 +53,7 @@ import com.fsaint.androidagent.data.RoomConversationCheckpointStore
 import com.fsaint.androidagent.data.McpConfigurationEntity
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.ToolCall
+import com.fsaint.androidagent.model.ToolResult
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.PrincipalRole
@@ -141,6 +142,8 @@ class DarkLordApplication : Application() {
     private val appsCapability by lazy { AppsCapability(PackageManagerAppsAdapter(this)) }
     private val cameraCapability by lazy { CameraCapability(AndroidCameraAdapter(this)) }
     private val microphoneCapability by lazy { MicrophoneCapability(AndroidMicrophoneAdapter(this)) }
+    private val mediaLease by lazy { MediaResourceCoordinator() }
+    private val mediaForeground by lazy { AndroidMediaJobForeground(this) }
     private val audioCapability by lazy { AudioCapability(AndroidAudioAdapter(this)) }
     private val radioCapability by lazy { RadioCapability(AndroidRadioAdapter(this)) }
     private val environmentCapability by lazy { EnvironmentCapability(AndroidEnvironmentAdapter(this)) }
@@ -176,7 +179,8 @@ class DarkLordApplication : Application() {
             startVideo = cameraCapability::startVideo,
             stopVideo = cameraCapability::stopVideo,
             stateStore = SharedPreferencesBackgroundJobStateStore(this),
-            mediaForeground = AndroidMediaJobForeground(this),
+            mediaForeground = mediaForeground,
+            mediaLease = mediaLease,
         ) { arguments -> pythonRuntime.handlers().getValue("python.exec")(ToolCall("python.exec", arguments)) }
     }
     private val telegramPhotoSender by lazy { TelegramPhotoSender(telegramBotCredentials, artifactStore) { telegramOwnerChat.read() } }
@@ -192,6 +196,7 @@ class DarkLordApplication : Application() {
                 mapOf("camera.capture" to captureArtifactHandler()) +
                 microphoneCapability.toolHandlers() +
                 mapOf("microphone.record" to recordAudioArtifactHandler()) +
+                mediaControlHandlers() +
                 audioCapability.toolHandlers() +
                 radioCapability.toolHandlers() +
                 environmentCapability.toolHandlers() +
@@ -399,6 +404,17 @@ class DarkLordApplication : Application() {
         }
     }
 
+    /** Overrides direct recording tools so they hold the same lease as background media jobs. */
+    private fun mediaControlHandlers(): Map<String, suspend (ToolCall) -> ToolResult<Any>> =
+        DirectMediaControlHandlers(
+            lease = mediaLease,
+            onStartVideo = cameraCapability::startVideo,
+            onStopVideo = cameraCapability::stopVideo,
+            onStartMicrophone = microphoneCapability::start,
+            onStopMicrophone = microphoneCapability::stop,
+            onRecordMicrophone = recordAudioArtifactHandler(),
+        ).handlers()
+
     private fun wavArtifact(clip: MicrophoneClip): ByteArray {
         val header = java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
         header.put("RIFF".toByteArray()); header.putInt(36 + clip.bytes.size); header.put("WAVEfmt ".toByteArray()); header.putInt(16)
@@ -422,6 +438,9 @@ class DarkLordApplication : Application() {
     }
 
     suspend fun stopBackgroundMediaJob(jobId: String) { backgroundJobs.stop(jobId, null) }
+
+    /** Called by the service only after its camera|microphone foreground type is active. */
+    fun acknowledgeBackgroundMediaForeground(jobId: String) { mediaForeground.acknowledge(jobId) }
 
     /** Cancels and joins all application work after Telegram's polling boundary is closed. */
     suspend fun shutdown() {
