@@ -1,0 +1,4 @@
+interface:
+  display_name: "Dark Lord Device Testing"
+  short_description: "Run Dark Lord phone API tests safely"
+  default_prompt: "Run the Dark Lord phone API test suite and report failures."

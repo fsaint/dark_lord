@@ -32,6 +32,8 @@ class OpenAiResponsesProviderTest {
     fun includesInventoryAndMapsModelToolNamesBackToCanonicalIds() = runTest {
         val transport = FakeTransport { request ->
             assertTrue(request.body.contains("Available phone tools: device.battery"))
+            assertTrue(request.body.contains("Use phone tools for real-world actions"))
+            assertTrue(request.body.contains("Use artifacts as the handoff format"))
             OpenAiHttpResponse(200, "{\"tool\":\"device_battery\"}")
         }
         val client = OpenAiHttpClient(transport, StaticApiKey("sk-test"))
@@ -75,6 +77,20 @@ class OpenAiResponsesProviderTest {
     }
 
     @Test
+    fun parsesResponsesApiFunctionCallArgumentsString() = runTest {
+        val client = OpenAiHttpClient(FakeTransport {
+            OpenAiHttpResponse(200, "{\"output\":[{\"type\":\"function_call\",\"arguments\":\"{\\\"code\\\":\\\"137 * 29\\\",\\\"arguments\\\":\\\"\\\"}\",\"name\":\"python_exec\"}]}")
+        }, StaticApiKey("sk-test"))
+
+        val response = client.respond(ConversationRequest(session, event, AgentContext(setOf("python.exec"), emptyMap()), "calculate"))
+
+        assertEquals(
+            ConversationResponse.Tool(com.fsaint.androidagent.model.ToolCall("python.exec", mapOf("code" to "137 * 29", "arguments" to ""))),
+            response,
+        )
+    }
+
+    @Test
     fun tellsModelWhichChatItIsInSoItNeverAsksForAChatId() = runTest {
         val telegram = ScopeRegistry().sessionFor(Principal("owner", null, PrincipalRole.OWNER), "TELEGRAM")
         val message = AgentEvent("telegram:7", "telegram.received", "123456789", 1, mapOf("sender" to "123456789", "body" to "send me a photo"))
@@ -90,6 +106,32 @@ class OpenAiResponsesProviderTest {
         assertTrue(body.contains("Chat id: 123456789"), body)
         assertTrue(body.contains("never ask the user for it"), body)
         assertTrue(body.contains("\"chatId\":{\"type\":\"string\",\"description\":\"Optional. The app supplies the current authenticated Telegram chat automatically. Never ask the owner for a chat ID.\"}"), body)
+    }
+
+    @Test
+    fun serializesToolResultsForTheNextConversationTurn() = runTest {
+        var body = ""
+        val client = OpenAiHttpClient(FakeTransport { request ->
+            body = request.body
+            OpenAiHttpResponse(200, "{\"output_text\":\"done\"}")
+        }, StaticApiKey("sk-test"))
+
+        client.respond(ConversationRequest(
+            session,
+            event,
+            context,
+            "check battery",
+            ConversationTranscript(listOf(
+                ConversationTurn.AssistantTool(com.fsaint.androidagent.model.ToolCall("device.battery")),
+                ConversationTurn.ToolOutput(
+                    com.fsaint.androidagent.model.ToolCall("device.battery"),
+                    com.fsaint.androidagent.model.ToolResult(true, "100%"),
+                ),
+            ), nextTurn = 1),
+        ))
+
+        assertTrue(body.contains("Tool result for device.battery"), body)
+        assertTrue(body.contains("100%"), body)
     }
 
     @Test

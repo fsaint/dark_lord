@@ -18,6 +18,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -46,6 +47,8 @@ fun OpenAssistantScreen(
     onOpenMcpSettings: () -> Unit = {},
     onOpenBackgroundRuntimeSettings: () -> Unit = {},
     onOpenRuntimeNotificationSettings: () -> Unit = {},
+    localChatApiEnabled: Boolean = false,
+    onLocalChatApiEnabledChange: (Boolean) -> Unit = {},
 ) {
     var apiKey by remember { mutableStateOf("") }
     var telegramToken by remember { mutableStateOf("") }
@@ -129,6 +132,16 @@ fun OpenAssistantScreen(
                     onOpenNotificationSettings = onOpenRuntimeNotificationSettings,
                 )
                 OutlinedButton(onClick = onOpenMcpSettings, modifier = Modifier.fillMaxWidth()) { Text("MCP server settings") }
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Local chat API", style = MaterialTheme.typography.titleLarge)
+                        Text("Development-only HTTP chat on 127.0.0.1:8765. No authentication. Use adb port forwarding for testing and turn it off when finished.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        androidx.compose.foundation.layout.Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(if (localChatApiEnabled) "Enabled" else "Disabled")
+                            Switch(checked = localChatApiEnabled, onCheckedChange = onLocalChatApiEnabledChange)
+                        }
+                    }
+                }
                 OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.outlinedButtonColors()) { Text("Diagnostics") }
             }
         }

@@ -72,13 +72,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         AgentRuntimeNotificationFactory(this).ensureChannel()
         setContent {
+            val darkLordApplication = application as DarkLordApplication
             var principalSettingsOpen by rememberSaveable { mutableStateOf(false) }
             var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
             var mcpSettingsOpen by rememberSaveable { mutableStateOf(false) }
+            var localChatApiEnabled by remember { mutableStateOf(darkLordApplication.isLocalChatApiEnabled) }
             if (mcpSettingsOpen) {
-                McpSettingsRoute(application as DarkLordApplication) { mcpSettingsOpen = false }
+                McpSettingsRoute(darkLordApplication) { mcpSettingsOpen = false }
             } else if (diagnosticsOpen) {
-                DebugScreen((application as DarkLordApplication).diagnostics) { diagnosticsOpen = false }
+                DebugScreen(darkLordApplication.diagnostics) { diagnosticsOpen = false }
             } else if (principalSettingsOpen) {
                 PrincipalSettingsRoute(
                     application = application as DarkLordApplication,
@@ -99,6 +101,8 @@ class MainActivity : ComponentActivity() {
                     onOpenMcpSettings = { mcpSettingsOpen = true },
                     onOpenBackgroundRuntimeSettings = ::openBackgroundRuntimeSettings,
                     onOpenRuntimeNotificationSettings = ::openRuntimeNotificationSettings,
+                    localChatApiEnabled = localChatApiEnabled,
+                    onLocalChatApiEnabledChange = { enabled -> darkLordApplication.setLocalChatApiEnabled(enabled); localChatApiEnabled = enabled },
                     onSaveOpenAiKey = { value ->
                         lifecycleScope.launch {
                             val outcome = (application as DarkLordApplication).saveOpenAiApiKey(value)

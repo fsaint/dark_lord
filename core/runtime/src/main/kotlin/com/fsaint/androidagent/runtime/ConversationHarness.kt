@@ -90,6 +90,21 @@ class ConversationHarness(
                     return ConversationResult(response.text, transcript, transcript.nextTurn, calls, ConversationStopReason.FINAL_RESPONSE)
                 }
                 is ConversationResponse.Tool -> {
+                    val priorResult = transcript.turns.asReversed()
+                        .filterIsInstance<ConversationTurn.ToolOutput>()
+                        .firstOrNull { it.call == response.call }
+                    if (priorResult != null && !priorResult.result.success) {
+                        val message = if (priorResult.result.success) {
+                            "I already completed ${response.call.name} with that request."
+                        } else {
+                            "I couldn't complete ${response.call.name}: ${priorResult.result.error?.name ?: "the tool reported an error"}."
+                        }
+                        transcript = transcript.copy(
+                            turns = transcript.turns + ConversationTurn.AssistantFinal(message),
+                            nextTurn = transcript.nextTurn + 1,
+                        )
+                        return ConversationResult(message, transcript, transcript.nextTurn, calls, ConversationStopReason.FINAL_RESPONSE)
+                    }
                     calls += response.call
                     val executionCall = response.call.withConversationRecipient(request)
                     val turn = transcript.nextTurn
@@ -119,7 +134,13 @@ class ConversationHarness(
                 }
             }
         }
-        return ConversationResult(null, transcript, transcript.nextTurn, calls, ConversationStopReason.TURN_LIMIT)
+        return ConversationResult(
+            "I couldn't complete the request within the tool-call limit. The last tool result may indicate what needs attention.",
+            transcript,
+            transcript.nextTurn,
+            calls,
+            ConversationStopReason.TURN_LIMIT,
+        )
     }
 
     private companion object { const val MAX_TURNS = 8 }

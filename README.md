@@ -26,6 +26,8 @@ The conversational harness and Stage 12 background-runtime acceptance coverage a
 - Owner sessions can use camera, microphone, and screen tools from remote channels when the corresponding Android permissions are granted; non-owner background sessions remain restricted.
 - OpenAI Responses API conversational harness with model-selected tools, an eight-turn safety budget, one final SMS/voice response, and resumable Room-backed checkpoints.
 - Embedded Chaquopy Python 3.11 runtime for owner-authored one-shot and persistent scripts, with `dark_lord.call_tool(...)` bindings to the same scoped phone tools and artifact APIs used by the agent.
+- Unified owner-scoped background jobs for work that outlives a chat turn: `jobs.start`, `jobs.status`, `jobs.list`, `jobs.stop`, and `jobs.cancel`. Audio jobs can be started and stopped independently and produce bounded WAV artifacts; Python and sensor/radio logging jobs run under the same lifecycle, while unsupported media types report a truthful failure instead of pretending to complete.
+- Background job records survive process recreation as interrupted records, exclusive audio/video resources are guarded against overlap, and artifact results are returned as opaque IDs suitable for Telegram/local API delivery.
 - Owner-only OpenAI API-key setup stored in Android Keystore; credentials are excluded from diagnostics, messages, and audit output.
 - MCP connection foundations with scoped discovery, OAuth metadata, Streamable HTTP seams, private Tailscale server support, and network failure handling.
 - Owner-facing MCP server settings for saving and removing HTTPS endpoints with optional OAuth configuration.
@@ -35,6 +37,8 @@ The conversational harness and Stage 12 background-runtime acceptance coverage a
 ## Documentation
 
 - **[Getting started](docs/getting-started.md)** — build, install, provision, configure the model, and run the first SMS/voice test.
+- **[66-request local chat API device suite](docs/device-test/chat-api-50.md)** — exercise hardware, Python, artifacts, browser, MCP, skills, and background jobs through the development API.
+- **[Dark Lord device-testing skill](.agents/skills/dark-lord-device-testing/SKILL.md)** — reusable instructions for running and interpreting the 66-request phone API suite.
 
 - [Technical specification](SPEC.md)
 - [Approved architecture and design](docs/superpowers/specs/2026-08-29-android-agent-design.md)

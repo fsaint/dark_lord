@@ -74,5 +74,5 @@ class ArtifactStore(
     private fun cleanupLocked(now: Long) { metadata.keys.toList().forEach { id -> if (metadata[id]!!.expiresAtEpochMs <= now) deleteLocked(id) } }
     private fun deleteLocked(id: String) { metadata.remove(id); File(directory, id).delete() }
 
-    companion object { val ALLOWED_MIME_TYPES = setOf("image/jpeg", "image/png", "application/pdf", "text/plain", "audio/mpeg", "audio/wav") }
+    companion object { val ALLOWED_MIME_TYPES = setOf("image/jpeg", "image/png", "application/pdf", "text/plain", "audio/mpeg", "audio/wav", "audio/mp4", "video/mp4", "video/webm") }
 }

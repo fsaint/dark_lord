@@ -65,6 +65,11 @@ chaquopy {
         pip {
             install("requests")
             install("Pillow")
+            install("python-dateutil")
+            install("beautifulsoup4")
+            install("PyYAML")
+            install("qrcode")
+            install("openpyxl")
         }
     }
 }
