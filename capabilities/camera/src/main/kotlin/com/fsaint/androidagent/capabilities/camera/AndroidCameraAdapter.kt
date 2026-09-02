@@ -88,6 +88,13 @@ class AndroidCameraAdapter(context: Context) : CameraAdapter {
         }
     }
 
+    override suspend fun startVideo(request: VideoStartRequest): CameraOperationOutcome =
+        CameraOperationOutcome.Unsupported
+
+    override suspend fun stopVideo(): CameraVideoStopOutcome = CameraVideoStopOutcome.Unsupported
+
+    override fun recordingVideo(): Boolean = false
+
     private fun describe(cameraId: String): CameraDescription {
         val characteristics = cameraManager.getCameraCharacteristics(cameraId)
         return CameraDescription(

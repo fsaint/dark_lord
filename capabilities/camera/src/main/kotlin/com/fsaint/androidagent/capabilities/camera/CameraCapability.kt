@@ -10,6 +10,7 @@ import com.fsaint.androidagent.model.ToolResult
 import com.fsaint.androidagent.model.VerificationState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import java.io.File
 
 data class CameraTool(override val id: String) : AgentTool
 
@@ -27,6 +28,22 @@ data class CameraCaptureRequest(
     val maxWidth: Int = 1920,
     val maxHeight: Int = 1080,
     val maxBytes: Int = 4_000_000,
+)
+
+data class VideoStartRequest(
+    val cameraId: String? = null,
+    val maxWidth: Int = 1280,
+    val maxHeight: Int = 720,
+    val maxDurationMs: Long = 60_000,
+    val maxBytes: Int = 16_000_000,
+)
+
+data class VideoClip(
+    val file: File,
+    val mimeType: String,
+    val width: Int,
+    val height: Int,
+    val durationMs: Long,
 )
 
 data class CameraImage(
@@ -63,6 +80,16 @@ sealed interface CameraCaptureOutcome {
     data object Failed : CameraCaptureOutcome
 }
 
+sealed interface CameraVideoStopOutcome {
+    data class Success(val clip: VideoClip) : CameraVideoStopOutcome
+    data object PermissionRequired : CameraVideoStopOutcome
+    data object Unsupported : CameraVideoStopOutcome
+    data object DeviceBusy : CameraVideoStopOutcome
+    data object NotFound : CameraVideoStopOutcome
+    data object OsRestricted : CameraVideoStopOutcome
+    data object Failed : CameraVideoStopOutcome
+}
+
 enum class CameraOperationOutcome {
     Success,
     PermissionRequired,
@@ -79,6 +106,9 @@ interface CameraAdapter {
     suspend fun list(): CameraListOutcome
     suspend fun capture(request: CameraCaptureRequest): CameraCaptureOutcome
     suspend fun setTorch(cameraId: String, enabled: Boolean): CameraOperationOutcome
+    suspend fun startVideo(request: VideoStartRequest): CameraOperationOutcome
+    suspend fun stopVideo(): CameraVideoStopOutcome
+    fun recordingVideo(): Boolean
 }
 
 class CameraCapability(private val adapter: CameraAdapter) : AgentCapability {
@@ -146,6 +176,30 @@ class CameraCapability(private val adapter: CameraAdapter) : AgentCapability {
         return adapter.setTorch(cameraId, enabled).toToolResult()
     }
 
+    suspend fun startVideo(request: VideoStartRequest): ToolResult<Unit> {
+        if (!request.isWithinHardBounds()) return ToolResult(success = false, error = ToolError.SCOPE_DENIED)
+        preflight<Unit>()?.let { return it }
+        return adapter.startVideo(request).toToolResult()
+    }
+
+    suspend fun stopVideo(): ToolResult<VideoClip> {
+        preflight<VideoClip>()?.let { return it }
+        return when (val outcome = adapter.stopVideo()) {
+            is CameraVideoStopOutcome.Success -> ToolResult(
+                success = true,
+                payload = outcome.clip,
+                verification = VerificationState.VERIFIED,
+            )
+            CameraVideoStopOutcome.PermissionRequired -> permissionRequired()
+            CameraVideoStopOutcome.Unsupported -> unsupported()
+            CameraVideoStopOutcome.DeviceBusy -> deviceBusy()
+            CameraVideoStopOutcome.NotFound -> ToolResult(success = false, error = ToolError.NOT_FOUND)
+            CameraVideoStopOutcome.OsRestricted,
+            CameraVideoStopOutcome.Failed,
+            -> ToolResult(success = false, error = ToolError.OS_RESTRICTED, recoverable = true)
+        }
+    }
+
     fun toolHandlers(): Map<String, suspend (ToolCall) -> ToolResult<Any>> = mapOf(
         "camera.list" to { list().toAnyResult() },
         "camera.capture" to { call ->
@@ -160,8 +214,18 @@ class CameraCapability(private val adapter: CameraAdapter) : AgentCapability {
         },
         "camera.startPreview" to { unsupported<Any>() },
         "camera.stopPreview" to { unsupported<Any>() },
-        "camera.startVideo" to { unsupported<Any>() },
-        "camera.stopVideo" to { unsupported<Any>() },
+        "camera.startVideo" to { call ->
+            startVideo(
+                VideoStartRequest(
+                    cameraId = call.arguments["cameraId"]?.takeIf(String::isNotBlank),
+                    maxWidth = call.arguments["maxWidth"]?.toIntOrNull() ?: 1280,
+                    maxHeight = call.arguments["maxHeight"]?.toIntOrNull() ?: 720,
+                    maxDurationMs = call.arguments["maxDurationMs"]?.toLongOrNull() ?: 60_000,
+                    maxBytes = call.arguments["maxBytes"]?.toIntOrNull() ?: 16_000_000,
+                ),
+            ).toAnyResult()
+        },
+        "camera.stopVideo" to { stopVideo().toAnyResult() },
         "camera.setZoom" to { unsupported<Any>() },
         "camera.setFocus" to { unsupported<Any>() },
         "camera.setTorch" to { call ->
@@ -192,6 +256,12 @@ private val CAMERA_TOOLS = listOf(
 
 private fun CameraCaptureRequest.isWithinHardBounds(): Boolean =
     maxWidth in 1..4096 && maxHeight in 1..4096 && maxBytes in 1..8_000_000
+
+private fun VideoStartRequest.isWithinHardBounds(): Boolean =
+    maxWidth in 1..4096 &&
+        maxHeight in 1..4096 &&
+        maxDurationMs in 1..600_000 &&
+        maxBytes in 1..64_000_000
 
 private fun CameraImage.isWithin(request: CameraCaptureRequest): Boolean =
     width in 1..request.maxWidth &&
