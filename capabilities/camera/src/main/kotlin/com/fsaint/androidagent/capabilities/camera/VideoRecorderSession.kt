@@ -42,6 +42,36 @@ internal data class VideoRecorderConfiguration private constructor(
     }
 }
 
+internal class VideoRecordingFinalizer(
+    private val configuration: VideoRecorderConfiguration,
+) {
+    private var completedClip: VideoClip? = null
+
+    @Synchronized
+    fun completed(): VideoClip? = completedClip
+
+    @Synchronized
+    fun finalize(file: File, durationMs: Long): VideoClip? {
+        completedClip?.let { return it }
+        if (file.length() !in 1..configuration.maxBytes || durationMs !in 1..configuration.maxDurationMs) {
+            file.delete()
+            return null
+        }
+        return VideoClip(
+            file = file,
+            mimeType = "video/mp4",
+            width = configuration.width,
+            height = configuration.height,
+            durationMs = durationMs,
+        ).also { completedClip = it }
+    }
+
+    @Synchronized
+    fun abort(file: File) {
+        if (completedClip == null) file.delete()
+    }
+}
+
 internal class VideoRecorderSession(
     context: Context,
     private val configuration: VideoRecorderConfiguration,
@@ -51,6 +81,9 @@ internal class VideoRecorderSession(
     private val appContext = context.applicationContext
     private val started = CompletableDeferred<CameraOperationOutcome>()
     private val released = AtomicBoolean(false)
+    private val stopLock = Any()
+    private val finalizer = VideoRecordingFinalizer(configuration)
+    private val limitReached = AtomicBoolean(false)
     private var mediaRecorder: MediaRecorder? = null
     private var captureSession: CameraCaptureSession? = null
     private var outputSurface: Surface? = null
@@ -79,6 +112,7 @@ internal class VideoRecorderSession(
                     what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ||
                     what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED
                 ) {
+                    limitReached.set(true)
                     onLimitReached()
                 }
             }
@@ -130,32 +164,27 @@ internal class VideoRecorderSession(
 
     suspend fun awaitStarted(): CameraOperationOutcome = started.await()
 
-    fun stop(): VideoClip {
+    fun stop(): VideoClip = synchronized(stopLock) {
+        finalizer.completed()?.let { return@synchronized it }
         val startedAt = startedAtMs ?: throw IllegalStateException("Video recording did not start")
         try {
             mediaRecorder?.stop() ?: throw IllegalStateException("Recorder was not prepared")
-            if (file.length() <= 0L) throw IllegalStateException("Recorder created an empty video")
-            return VideoClip(
-                file = file,
-                mimeType = "video/mp4",
-                width = configuration.width,
-                height = configuration.height,
-                durationMs = recordedDurationMs(startedAt),
-            )
         } catch (error: RuntimeException) {
-            file.delete()
-            throw error
-        } catch (error: IllegalStateException) {
-            file.delete()
+            if (limitReached.get()) {
+                finalizer.finalize(file, recordedDurationMs(startedAt))?.let { return@synchronized it }
+            }
+            finalizer.abort(file)
             throw error
         } finally {
             releaseResources()
         }
+        finalizer.finalize(file, recordedDurationMs(startedAt))
+            ?: throw IllegalStateException("Recorder output exceeded its bounds or was empty")
     }
 
-    fun abort() {
+    fun abort() = synchronized(stopLock) {
         releaseResources()
-        file.delete()
+        finalizer.abort(file)
     }
 
     private fun recordedDurationMs(startedAt: Long): Long {

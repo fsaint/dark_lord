@@ -235,29 +235,31 @@ class AndroidCameraAdapter(context: Context) : CameraAdapter {
     }
 
     @SuppressLint("MissingPermission")
-    private suspend fun openVideoCamera(cameraId: String, handler: Handler): VideoCameraOpen {
-        val opened = CompletableDeferred<VideoCameraOpen>()
+    private suspend fun openVideoCamera(cameraId: String, handler: Handler): VideoCameraOpen<CameraDevice> {
+        val opened = VideoOpenGate<CameraDevice> { it.close() }
         cameraManager.openCamera(
             cameraId,
             object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
-                    if (!opened.complete(VideoCameraOpen.Success(camera))) camera.close()
+                    opened.opened(camera)
                 }
 
                 override fun onDisconnected(camera: CameraDevice) {
                     camera.close()
-                    opened.complete(VideoCameraOpen.Failure(CameraOperationOutcome.DeviceBusy))
+                    opened.failed(CameraOperationOutcome.DeviceBusy)
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
                     camera.close()
-                    opened.complete(VideoCameraOpen.Failure(error.toOperationOutcome()))
+                    opened.failed(error.toOperationOutcome())
                 }
             },
             handler,
         )
-        return withTimeoutOrNull(VIDEO_START_TIMEOUT_MS) { opened.await() }
-            ?: VideoCameraOpen.Failure(CameraOperationOutcome.Failed)
+        return withTimeoutOrNull(VIDEO_START_TIMEOUT_MS) { opened.await() } ?: run {
+            opened.timeout()
+            opened.await()
+        }
     }
 
     private fun stopVideoAtLimit() {
@@ -291,11 +293,6 @@ class AndroidCameraAdapter(context: Context) : CameraAdapter {
         val thread: HandlerThread,
         val handler: Handler,
     )
-
-    private sealed interface VideoCameraOpen {
-        data class Success(val camera: CameraDevice) : VideoCameraOpen
-        data class Failure(val outcome: CameraOperationOutcome) : VideoCameraOpen
-    }
 
     @SuppressLint("MissingPermission")
     private suspend fun capture(
@@ -428,6 +425,36 @@ class AndroidCameraAdapter(context: Context) : CameraAdapter {
 private const val SAFE_VIDEO_WIDTH = 1280
 private const val SAFE_VIDEO_HEIGHT = 720
 private const val VIDEO_START_TIMEOUT_MS = 10_000L
+
+internal sealed interface VideoCameraOpen<out T> {
+    data class Success<T>(val camera: T) : VideoCameraOpen<T>
+    data class Failure(val outcome: CameraOperationOutcome) : VideoCameraOpen<Nothing>
+}
+
+internal class VideoOpenGate<T>(
+    private val closeLateValue: (T) -> Unit,
+) {
+    private val terminal = AtomicBoolean(false)
+    private val result = CompletableDeferred<VideoCameraOpen<T>>()
+
+    fun opened(value: T) {
+        if (terminal.compareAndSet(false, true)) {
+            result.complete(VideoCameraOpen.Success(value))
+        } else {
+            closeLateValue(value)
+        }
+    }
+
+    fun failed(outcome: CameraOperationOutcome) {
+        if (terminal.compareAndSet(false, true)) {
+            result.complete(VideoCameraOpen.Failure(outcome))
+        }
+    }
+
+    fun timeout() = failed(CameraOperationOutcome.Failed)
+
+    suspend fun await(): VideoCameraOpen<T> = result.await()
+}
 
 private fun Int.normalizedRotation(): Int = when (this) {
     90, 180, 270 -> this
