@@ -12,6 +12,7 @@ fun interface BackgroundRuntimeRestoreScheduler {
 }
 
 class BootReceiver : BroadcastReceiver() {
+    // Runtime recovery never restarts media jobs; their manager restores active media as INTERRUPTED.
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,

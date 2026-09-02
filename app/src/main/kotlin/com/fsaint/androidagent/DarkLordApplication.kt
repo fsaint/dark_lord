@@ -16,6 +16,8 @@ import com.fsaint.androidagent.capabilities.audio.AndroidAudioAdapter
 import com.fsaint.androidagent.capabilities.audio.AndroidMicrophoneAdapter
 import com.fsaint.androidagent.capabilities.audio.AudioCapability
 import com.fsaint.androidagent.capabilities.audio.MicrophoneCapability
+import com.fsaint.androidagent.capabilities.audio.MicrophoneClip
+import com.fsaint.androidagent.capabilities.audio.MicrophoneRecordRequest
 import com.fsaint.androidagent.capabilities.camera.AndroidCameraAdapter
 import com.fsaint.androidagent.capabilities.camera.CameraCapability
 import com.fsaint.androidagent.capabilities.device.DeviceCapability
@@ -50,6 +52,7 @@ import com.fsaint.androidagent.data.DurableStateRepository
 import com.fsaint.androidagent.data.RoomConversationCheckpointStore
 import com.fsaint.androidagent.data.McpConfigurationEntity
 import com.fsaint.androidagent.model.AgentEvent
+import com.fsaint.androidagent.model.ToolCall
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.PrincipalRole
@@ -128,6 +131,8 @@ internal class ApplicationShutdownLifecycle(
 class DarkLordApplication : Application() {
     private val applicationSupervisor = SupervisorJob()
     private val applicationScope = CoroutineScope(applicationSupervisor + Dispatchers.IO)
+    private val localChatPreferences by lazy { getSharedPreferences("local_chat_api", MODE_PRIVATE) }
+    private val localChatApi by lazy { LocalChatApi(applicationScope) { processLocalChat(it) } }
     private val database by lazy { EncryptedAgentDatabaseFactory.open(this) }
     val principals: PrincipalDirectory by lazy { PrincipalRepository(database.durableStateDao()) }
     private val smsCapability by lazy { SmsCapability(this) }
@@ -163,6 +168,17 @@ class DarkLordApplication : Application() {
     private val browserTools by lazy { BrowserTools() }
     private val artifactStore by lazy { ArtifactStore(this) }
     private val pythonRuntime: PythonRuntime by lazy { PythonRuntime(this, artifactStore) { session, call -> agentTools.execute(session, call) } }
+    private val backgroundJobs: BackgroundJobManager by lazy {
+        BackgroundJobManager(
+            artifacts = artifactStore,
+            microphone = microphoneCapability,
+            scope = applicationScope,
+            startVideo = cameraCapability::startVideo,
+            stopVideo = cameraCapability::stopVideo,
+            stateStore = SharedPreferencesBackgroundJobStateStore(this),
+            mediaForeground = AndroidMediaJobForeground(this),
+        ) { arguments -> pythonRuntime.handlers().getValue("python.exec")(ToolCall("python.exec", arguments)) }
+    }
     private val telegramPhotoSender by lazy { TelegramPhotoSender(telegramBotCredentials, artifactStore) { telegramOwnerChat.read() } }
     private val durableState by lazy { DurableStateRepository(database.durableStateDao()) }
     private val agentTools: ScopedToolRouter by lazy {
@@ -175,12 +191,14 @@ class DarkLordApplication : Application() {
                 cameraCapability.toolHandlers() +
                 mapOf("camera.capture" to captureArtifactHandler()) +
                 microphoneCapability.toolHandlers() +
+                mapOf("microphone.record" to recordAudioArtifactHandler()) +
                 audioCapability.toolHandlers() +
                 radioCapability.toolHandlers() +
                 environmentCapability.toolHandlers() +
                 browserTools.handlers() +
                 artifactStore.handlers() +
                 pythonRuntime.handlers() +
+                backgroundJobs.handlers() +
                 telegramPhotoSender.handlers(),
             scopes,
         )
@@ -273,6 +291,7 @@ class DarkLordApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (localChatPreferences.getBoolean("enabled", false)) localChatApi.start()
         if (!Python.isStarted()) Python.start(AndroidPlatform(this))
         artifactStore.cleanup()
         applicationScope.launch {
@@ -309,6 +328,33 @@ class DarkLordApplication : Application() {
         }
     }
 
+    val isLocalChatApiEnabled: Boolean get() = localChatApi.isRunning
+
+    fun setLocalChatApiEnabled(enabled: Boolean) {
+        localChatPreferences.edit().putBoolean("enabled", enabled).apply()
+        if (enabled) localChatApi.start() else localChatApi.stop()
+    }
+
+    private suspend fun processLocalChat(text: String): String {
+        require(text.isNotBlank()) { "Message is required" }
+        require(text.length <= 16_384) { "Message is too long" }
+        val owner = principals.owner() ?: error("No owner is configured")
+        val now = System.currentTimeMillis()
+        val session = scopes.sessionFor(owner, "LOCAL_API")
+        val requestedTools = if (text.lowercase().let { it.contains("python") || it.contains("code") || it.contains("calculate") || it.contains("parse json") || it.contains("yaml") || it.contains("qr") }) {
+            agentTools.availableToolIds.filter { it.startsWith("python.") || it.startsWith("artifact.") }.toSet()
+        } else agentTools.availableToolIds
+        val result = conversationHarness.run(
+            com.fsaint.androidagent.runtime.ConversationRequest(
+                session = session,
+                event = AgentEvent("local-api:$now", "local.chat", "local-api", now, mapOf("body" to text, "sender" to "local-api")),
+                context = ScopedContextBuilder(scopes, emptyMap(), requestedTools, mcpCatalog, skillCatalog).build(session),
+                userText = text,
+            ),
+        )
+        return result.response ?: "The agent did not produce a final response."
+    }
+
     /** Runs a spoken request through the same runtime, tools, MCP servers, and skills as the owner's chat. */
     private suspend fun dispatchVoiceTranscript(transcript: String): Boolean {
         principals.owner() ?: return false
@@ -335,6 +381,33 @@ class DarkLordApplication : Application() {
         }
     }
 
+    /** Keep binary PCM out of the model transcript. Return the same opaque artifact shape as camera.capture. */
+    private fun recordAudioArtifactHandler(): suspend (ToolCall) -> com.fsaint.androidagent.model.ToolResult<Any> = { call ->
+        val result = microphoneCapability.record(
+            MicrophoneRecordRequest(
+                durationMs = call.arguments["durationMs"]?.toLongOrNull()?.coerceIn(1, 60_000) ?: 3_000,
+                sampleRateHz = call.arguments["sampleRateHz"]?.toIntOrNull() ?: 16_000,
+                maxBytes = call.arguments["maxBytes"]?.toIntOrNull()?.coerceIn(8_000, 2_000_000) ?: 320_000,
+            ),
+        )
+        val clip = result.payload
+        if (result.success && clip is MicrophoneClip) {
+            val artifact = artifactStore.store(wavArtifact(clip), "audio/wav")
+            com.fsaint.androidagent.model.ToolResult(true, artifact, verification = VerificationState.VERIFIED)
+        } else {
+            com.fsaint.androidagent.model.ToolResult(false, error = result.error, recoverable = result.recoverable)
+        }
+    }
+
+    private fun wavArtifact(clip: MicrophoneClip): ByteArray {
+        val header = java.nio.ByteBuffer.allocate(44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        header.put("RIFF".toByteArray()); header.putInt(36 + clip.bytes.size); header.put("WAVEfmt ".toByteArray()); header.putInt(16)
+        header.putShort(1); header.putShort(clip.channelCount.toShort()); header.putInt(clip.sampleRateHz)
+        header.putInt(clip.sampleRateHz * clip.channelCount * 2); header.putShort((clip.channelCount * 2).toShort()); header.putShort(16)
+        header.put("data".toByteArray()); header.putInt(clip.bytes.size)
+        return header.array() + clip.bytes
+    }
+
     /** Explicitly stops Telegram polling and waits for its durable boundary to close. */
     suspend fun stopTelegramUpdates() = runtimeCoordinator.stop()
 
@@ -347,6 +420,8 @@ class DarkLordApplication : Application() {
     fun stopBackgroundRuntime() {
         startService(AgentRuntimeService.stopIntent(this))
     }
+
+    suspend fun stopBackgroundMediaJob(jobId: String) { backgroundJobs.stop(jobId, null) }
 
     /** Cancels and joins all application work after Telegram's polling boundary is closed. */
     suspend fun shutdown() {

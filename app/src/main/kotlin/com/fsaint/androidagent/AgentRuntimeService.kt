@@ -41,7 +41,17 @@ class AgentRuntimeService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
-        handler.handle(intent, startId)
+        when {
+            intent?.action == ACTION_STOP_MEDIA -> {
+                intent.getStringExtra(EXTRA_MEDIA_JOB_ID)?.let { jobId -> serviceScope.launch { (application as? DarkLordApplication)?.stopBackgroundMediaJob(jobId); foreground.stop() } }
+                START_NOT_STICKY
+            }
+            intent?.getStringExtra(EXTRA_MEDIA_JOB_ID) != null -> {
+                foreground.startMedia(intent.getStringExtra(EXTRA_MEDIA_JOB_ID)!!)
+                START_NOT_STICKY
+            }
+            else -> handler.handle(intent, startId)
+        }
 
     override fun onDestroy() {
         runBlocking { handler.shutdown() }
@@ -53,6 +63,8 @@ class AgentRuntimeService : Service() {
         const val ACTION_START = "com.fsaint.androidagent.runtime.START"
         const val ACTION_STOP = "com.fsaint.androidagent.runtime.STOP"
         const val ACTION_RESTART = "com.fsaint.androidagent.runtime.RESTART"
+        const val ACTION_STOP_MEDIA = "com.fsaint.androidagent.runtime.STOP_MEDIA"
+        const val EXTRA_MEDIA_JOB_ID = "com.fsaint.androidagent.runtime.MEDIA_JOB_ID"
         const val CHANNEL_ID = "agent_runtime"
         const val SPECIAL_USE_SUBTYPE = "user_authorized_persistent_agent_runtime"
 
@@ -66,6 +78,12 @@ class AgentRuntimeService : Service() {
 
         fun restartIntent(context: Context): Intent =
             Intent(context, AgentRuntimeService::class.java).setAction(ACTION_RESTART)
+
+        fun mediaIntent(context: Context, jobId: String): Intent =
+            Intent(context, AgentRuntimeService::class.java).setAction(ACTION_START).putExtra(EXTRA_MEDIA_JOB_ID, jobId)
+
+        fun stopMediaIntent(context: Context, jobId: String): Intent =
+            Intent(context, AgentRuntimeService::class.java).setAction(ACTION_STOP_MEDIA).putExtra(EXTRA_MEDIA_JOB_ID, jobId)
     }
 }
 
@@ -149,6 +167,7 @@ internal interface AgentRuntimeForegroundController {
     fun ensureChannel()
     fun start()
     fun stop()
+    fun startMedia(jobId: String)
 }
 
 private class AndroidAgentRuntimeForegroundController(
@@ -173,6 +192,15 @@ private class AndroidAgentRuntimeForegroundController(
 
     override fun stop() {
         service.stopForeground(Service.STOP_FOREGROUND_REMOVE)
+    }
+
+    override fun startMedia(jobId: String) {
+        ensureChannel()
+        service.startForeground(
+            AgentRuntimeService.NOTIFICATION_ID,
+            notifications.buildMedia(jobId),
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+        )
     }
 }
 
@@ -202,6 +230,24 @@ internal class AgentRuntimeNotificationFactory(
             .addAction(restartAction())
             .build()
 
+    fun buildMedia(jobId: String): Notification =
+        Notification.Builder(context, AgentRuntimeService.CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle("Recording video")
+            .setContentText("Video job $jobId is recording")
+            .setWhen(System.currentTimeMillis())
+            .setUsesChronometer(true)
+            .setOngoing(true)
+            .setCategory(Notification.CATEGORY_SERVICE)
+            .addAction(
+                Notification.Action.Builder(
+                    Icon.createWithResource(context, android.R.drawable.ic_media_pause),
+                    "Stop recording",
+                    PendingIntent.getService(context, REQUEST_STOP_MEDIA, AgentRuntimeService.stopMediaIntent(context, jobId), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE),
+                ).build(),
+            )
+            .build()
+
     private fun stopAction(): Notification.Action =
         Notification.Action.Builder(
             Icon.createWithResource(context, android.R.drawable.ic_media_pause),
@@ -227,5 +273,6 @@ internal class AgentRuntimeNotificationFactory(
     private companion object {
         const val REQUEST_STOP = 1
         const val REQUEST_RESTART = 2
+        const val REQUEST_STOP_MEDIA = 3
     }
 }
