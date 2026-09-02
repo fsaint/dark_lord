@@ -72,54 +72,100 @@ internal class VideoRecordingFinalizer(
     }
 }
 
-internal class VideoRecorderSession(
-    context: Context,
+internal interface VideoRecorderBackend {
+    fun prepare(
+        configuration: VideoRecorderConfiguration,
+        file: File,
+        onLimitReached: (VideoRecorderLimit) -> Unit,
+    ): Surface
+
+    fun start()
+    fun stop()
+    fun reset()
+    fun release()
+}
+
+internal enum class VideoRecorderLimit {
+    DURATION,
+    FILE_SIZE,
+}
+
+private class AndroidVideoRecorderBackend : VideoRecorderBackend {
+    private val recorder = MediaRecorder()
+
+    override fun prepare(
+        configuration: VideoRecorderConfiguration,
+        file: File,
+        onLimitReached: (VideoRecorderLimit) -> Unit,
+    ): Surface = recorder.apply {
+        setAudioSource(MediaRecorder.AudioSource.CAMCORDER)
+        setVideoSource(MediaRecorder.VideoSource.SURFACE)
+        setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+        setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+        setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+        setVideoSize(configuration.width, configuration.height)
+        setMaxDuration(configuration.maxDurationMs)
+        setMaxFileSize(configuration.maxBytes)
+        setOutputFile(file.absolutePath)
+        setOnInfoListener { _, what, _ ->
+            if (
+                what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ||
+                what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED
+            ) {
+                onLimitReached(
+                    if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) {
+                        VideoRecorderLimit.DURATION
+                    } else {
+                        VideoRecorderLimit.FILE_SIZE
+                    },
+                )
+            }
+        }
+        prepare()
+    }.surface
+
+    override fun start() = recorder.start()
+    override fun stop() = recorder.stop()
+    override fun reset() = recorder.reset()
+    override fun release() = recorder.release()
+}
+
+internal class VideoRecorderSession private constructor(
     private val configuration: VideoRecorderConfiguration,
-    private val handler: Handler,
+    private val handler: Handler?,
     private val onLimitReached: () -> Unit,
+    val file: File,
+    private val recorder: VideoRecorderBackend,
+    private val clockMs: () -> Long,
+    private val metadataDurationMs: (File) -> Long?,
 ) {
-    private val appContext = context.applicationContext
     private val started = CompletableDeferred<CameraOperationOutcome>()
     private val released = AtomicBoolean(false)
     private val stopLock = Any()
     private val finalizer = VideoRecordingFinalizer(configuration)
-    private val limitReached = AtomicBoolean(false)
-    private var mediaRecorder: MediaRecorder? = null
+    private val limitSignaled = AtomicBoolean(false)
     private var captureSession: CameraCaptureSession? = null
     private var outputSurface: Surface? = null
     private var startedAtMs: Long? = null
 
-    val file: File = File(appContext.filesDir, "camera-videos").also { directory ->
-        if (!directory.exists() && !directory.mkdirs()) {
-            throw IllegalStateException("Unable to create private video directory")
-        }
-    }.let { directory -> File.createTempFile("video-", ".mp4", directory) }
+    constructor(
+        context: Context,
+        configuration: VideoRecorderConfiguration,
+        handler: Handler,
+        onLimitReached: () -> Unit,
+    ) : this(
+        configuration = configuration,
+        handler = handler,
+        onLimitReached = onLimitReached,
+        file = createOutputFile(context),
+        recorder = AndroidVideoRecorderBackend(),
+        clockMs = SystemClock::elapsedRealtime,
+        metadataDurationMs = ::readMetadataDurationMs,
+    )
 
     fun outputSurface(): Surface {
         outputSurface?.let { return it }
-        val recorder = MediaRecorder().apply {
-            setAudioSource(MediaRecorder.AudioSource.CAMCORDER)
-            setVideoSource(MediaRecorder.VideoSource.SURFACE)
-            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            setVideoSize(configuration.width, configuration.height)
-            setMaxDuration(configuration.maxDurationMs)
-            setMaxFileSize(configuration.maxBytes)
-            setOutputFile(file.absolutePath)
-            setOnInfoListener { _, what, _ ->
-                if (
-                    what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED ||
-                    what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED
-                ) {
-                    limitReached.set(true)
-                    onLimitReached()
-                }
-            }
-            prepare()
-        }
-        mediaRecorder = recorder
-        return recorder.surface.also { outputSurface = it }
+        return recorder.prepare(configuration, file, ::limitReached).also { outputSurface = it }
     }
 
     fun start(camera: CameraDevice, surface: Surface) {
@@ -135,8 +181,8 @@ internal class VideoRecorderSession(
                                 set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
                             }.build()
                             session.setRepeatingRequest(request, null, handler)
-                            mediaRecorder?.start() ?: error("Recorder was not prepared")
-                            startedAtMs = SystemClock.elapsedRealtime()
+                            recorder.start()
+                            recordingStarted()
                             started.complete(CameraOperationOutcome.Success)
                         } catch (_: SecurityException) {
                             started.complete(CameraOperationOutcome.PermissionRequired)
@@ -151,7 +197,7 @@ internal class VideoRecorderSession(
                         started.complete(CameraOperationOutcome.DeviceBusy)
                     }
                 },
-                handler,
+                            handler,
             )
         } catch (_: SecurityException) {
             started.complete(CameraOperationOutcome.PermissionRequired)
@@ -168,9 +214,9 @@ internal class VideoRecorderSession(
         finalizer.completed()?.let { return@synchronized it }
         val startedAt = startedAtMs ?: throw IllegalStateException("Video recording did not start")
         try {
-            mediaRecorder?.stop() ?: throw IllegalStateException("Recorder was not prepared")
+            recorder.stop()
         } catch (error: RuntimeException) {
-            if (limitReached.get()) {
+            if (limitSignaled.get()) {
                 finalizer.finalize(file, recordedDurationMs(startedAt))?.let { return@synchronized it }
             }
             finalizer.abort(file)
@@ -187,14 +233,17 @@ internal class VideoRecorderSession(
         finalizer.abort(file)
     }
 
+    internal fun recordingStarted() {
+        startedAtMs = clockMs()
+    }
+
+    internal fun limitReached(limit: VideoRecorderLimit) {
+        limitSignaled.set(true)
+        onLimitReached()
+    }
+
     private fun recordedDurationMs(startedAt: Long): Long {
-        val metadataDuration = runCatching {
-            MediaMetadataRetriever().use { retriever ->
-                retriever.setDataSource(file.absolutePath)
-                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
-            }
-        }.getOrNull()
-        return metadataDuration ?: (SystemClock.elapsedRealtime() - startedAt)
+        return metadataDurationMs(file) ?: (clockMs() - startedAt)
     }
 
     private fun releaseResources() {
@@ -203,8 +252,38 @@ internal class VideoRecorderSession(
         captureSession = null
         runCatching { outputSurface?.release() }
         outputSurface = null
-        runCatching { mediaRecorder?.reset() }
-        runCatching { mediaRecorder?.release() }
-        mediaRecorder = null
+        runCatching { recorder.reset() }
+        runCatching { recorder.release() }
+    }
+
+    companion object {
+        internal fun forRecordingTest(
+            configuration: VideoRecorderConfiguration,
+            file: File,
+            recorder: VideoRecorderBackend,
+            clockMs: () -> Long,
+        ): VideoRecorderSession = VideoRecorderSession(
+            configuration = configuration,
+            handler = null,
+            onLimitReached = {},
+            file = file,
+            recorder = recorder,
+            clockMs = clockMs,
+            metadataDurationMs = { null },
+        )
+
+        private fun createOutputFile(context: Context): File =
+            File(context.applicationContext.filesDir, "camera-videos").also { directory ->
+                if (!directory.exists() && !directory.mkdirs()) {
+                    throw IllegalStateException("Unable to create private video directory")
+                }
+            }.let { directory -> File.createTempFile("video-", ".mp4", directory) }
+
+        private fun readMetadataDurationMs(file: File): Long? = runCatching {
+            MediaMetadataRetriever().use { retriever ->
+                retriever.setDataSource(file.absolutePath)
+                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+            }
+        }.getOrNull()
     }
 }

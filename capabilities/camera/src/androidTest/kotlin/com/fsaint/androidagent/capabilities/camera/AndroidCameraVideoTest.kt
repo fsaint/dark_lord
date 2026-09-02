@@ -29,6 +29,8 @@ class AndroidCameraVideoTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         assumeTrue(context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY))
         val adapter = AndroidCameraAdapter(context)
+        val maxDurationMs = 5_000L
+        val maxBytes = 4_000_000
 
         assertEquals(
             CameraOperationOutcome.Success,
@@ -36,8 +38,8 @@ class AndroidCameraVideoTest {
                 VideoStartRequest(
                     maxWidth = 1280,
                     maxHeight = 720,
-                    maxDurationMs = 5_000,
-                    maxBytes = 4_000_000,
+                    maxDurationMs = maxDurationMs,
+                    maxBytes = maxBytes,
                 ),
             ),
         )
@@ -49,6 +51,8 @@ class AndroidCameraVideoTest {
         try {
             assertTrue(clip.file.exists())
             assertTrue(clip.file.length() > 0)
+            assertTrue(clip.file.length() <= maxBytes)
+            assertTrue(clip.durationMs in 1..maxDurationMs)
             MediaMetadataRetriever().use { retriever ->
                 retriever.setDataSource(clip.file.absolutePath)
                 assertTrue(
