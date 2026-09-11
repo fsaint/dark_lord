@@ -1,0 +1,105 @@
+{
+  "test": "folded-side-button-routine-probe",
+  "status": "update_installed_device_setup_reset_by_instrumentation_cleanup_reconfiguration_required",
+  "feedbackServiceUpdate": {
+    "changes": [
+      "Credential runtime initialization deferred until first unlock, with once-only initialization guard",
+      "Photo capture and analysis moved to a bounded camera/media-playback foreground service",
+      "Private progress/result notifications, durable latest answer, and Android TTS playback",
+      "Notification opens saved result without starting another capture"
+    ],
+    "unitRegressionTests": "7 passed: initialization deferral/retry, photo phase order, error redaction, speech failure, timeout, cancellation",
+    "fullValidation": "gradlew test :app:lintDebug passed; git diff --check passed",
+    "bootInstrumentation": "6 BootRecoveryTest tests passed; not a physical locked-boot test",
+    "testRunnerIncident": "connectedDebugAndroidTest cleanup removed the target app and its local setup. Reinstalled with installDebug at device time 2026-09-09T19:52:33-07:00. Previous credential preferences are absent and camera/notification permissions are no longer granted. No recoverable app-data backup was found in the task temporary files. User was informed immediately after discovery.",
+    "installation": "Current debug APK reinstalled successfully after test cleanup",
+    "apiSmoke": "Not completed: Tailscale health timed out and USB health unavailable after setup was cleared",
+    "cleanup": "Temporary USB port forward tcp:55068 removed",
+    "remaining": "Restore owner, provider and Telegram setup, Android permissions and optional local API; then physically test folded capture, notification and speech, and reboot/first-unlock startup"
+  },
+  "postRebootTest": {
+    "userSteps": "Reboot, unlock once, fold, physical double press; user reported done",
+    "inspectionDeviceTime": "2026-09-09T19:34:44-07:00",
+    "uptimeSeconds": 66.04,
+    "deviceState": "CLOSED, no override",
+    "triggerEvidence": "19:34:25.356 SideKeyDoublePress launched RoutineEngineService",
+    "captureEvidence": "19:34:27.590 DarkLordCamera PID 5139: still image available: 372772 bytes, 1088x1088",
+    "activityObservation": "PhotoConversationActivity in task 1127 on display 0, STOPPED, mVisible=false; no ADB activity launch after reboot",
+    "conclusion": "Fresh capture observed after reboot without the earlier live ADB-created cover task. Cover display/result presentation and model completion remain unverified.",
+    "tailscaleHealth": "Timed out after 8 seconds; transport cause not established",
+    "usbForwardHealth": {"ok": true, "running": true},
+    "usbForwardCleanup": "Temporary dynamically allocated forward removed after health check",
+    "bootCrash": {
+      "deviceTime": "2026-09-09T19:34:03-07:00",
+      "process": "com.fsaint.androidagent PID 4826",
+      "exception": "IllegalStateException: SharedPreferences in credential encrypted storage are not available until after user (id 0) is unlocked",
+      "trace": "DarkLordApplication.onCreate line 301 → localChatPreferences line 137 → getSharedPreferences",
+      "sourceFinding": "BootReceiver is directBootAware and receives LOCKED_BOOT_COMPLETED, but Application.onCreate reads credential-encrypted preferences before any unlock guard",
+      "recovery": "A later process captured a photo and the local API answered over USB after unlock",
+      "implementation": "Not changed during this diagnostic test"
+    }
+  },
+  "device": "SM-F711U1",
+  "routineName": "DL_side_button_probe",
+  "routineId": "9031215776053612475",
+  "actions": ["Show custom notification", "Open an app or do an app action: Dark Lord : Photo chat"],
+  "photoShortcutTest": {
+    "configuredAtDeviceTime": "2026-09-09T19:17:58-07:00",
+    "configuration": "Added Samsung Routines picker action Dark Lord : Photo chat after the existing notification; saved the same manual routine",
+    "buttonMapping": "Still ACTION_START_SERVICE to RoutineEngineService; long press unchanged",
+    "result": "Physical Side-button routine executed and a new still image was received, but the photo activity was hidden/stopped",
+    "observedAtDeviceTime": "2026-09-09T19:24:41-07:00",
+    "userObservation": "Only the notification banner was visible",
+    "evidence": [
+      "19:24:41.229 SideKeyDoublePress launched RoutineEngineService",
+      "19:24:41.242 RoutineEngineService runManualRoutine: routineId=2, activate=true, reason=SIDE_KEY",
+      "19:24:41.408 ActivityTaskManager displayed PhotoConversationActivity",
+      "19:24:41.443 WindowManager set the photo window visibility to false; subsequent activity dump showed STOPPED and mVisible=false",
+      "19:24:42.076 DarkLordCamera: still image available: 414634 bytes, 1088x1088"
+    ],
+    "deviceStateAfterTest": "CLOSED, no override",
+    "apiHealthAfterTest": {"ok": true, "running": true},
+    "crashCheck": "No AndroidRuntime error entries returned in the last 500 log records at inspection",
+    "modelResult": "Not independently verified",
+    "coldStartCaveat": "The launch reused task 1123 on display 1, previously created by the ADB diagnostic. No ADB activity launch occurred during this physical press, but clean-task/reboot behavior remains unverified.",
+    "displayHypothesis": "The photo activity has no showWhenLocked/turnScreenOn handling; keyguard was active during dispatch. This is a candidate explanation, not a validated fix."
+  },
+  "notificationTitle": "Dark_Lord_side_key_test",
+  "notificationText": "Routine_trigger_received",
+  "mappingVerified": "ACTION_START_SERVICE → com.samsung.android.app.routines/.engine.service.RoutineEngineService",
+  "longPressChanged": false,
+  "routineResult": {
+    "userObservation": "Trigger is received",
+    "deviceStateAfterTrigger": "CLOSED, no state override",
+    "deviceLogTime": "2026-09-09T18:58:23-07:00",
+    "evidence": [
+      "SideKeyDoublePress dispatched RoutineEngineService while requesting the folded cover toast",
+      "RoutineInstanceExecutorImpl ran DL_side_button_probe",
+      "CustomNotificationActionHandler performed Routine_trigger_received"
+    ],
+    "authenticationAtPhysicalPress": "Not independently established"
+  },
+  "coverDisplayDiagnostic": {
+    "command": "adb shell am start -W --display 1 -n com.fsaint.androidagent/.PhotoConversationActivity",
+    "deviceLogTime": "2026-09-09T18:59:06-07:00",
+    "launchResult": "Status ok; activity assigned to display 1 with 512x260 bounds",
+    "cameraResult": "18:59:07.377: still image available: 390609 bytes, 1088x1088",
+    "deviceStateBeforeAndAfter": "CLOSED, no state override",
+    "visibilityCaveat": "Activity subsequently STOPPED and not visible; persistent cover UI not established",
+    "scopeCaveat": "Launched by ADB shell UID 2000, not by the routine; standalone button-to-camera workflow remains unverified",
+    "modelResult": "Not verified"
+  },
+  "buildInstall": "BUILD SUCCESSFUL; installed on connected device",
+  "apiHealth": {
+    "ok": true,
+    "running": true
+  },
+  "crashCheck": "No AndroidRuntime error entries returned from the last 300 log records before the physical test; this is a bounded baseline check only.",
+  "originalDoublePressSettings": "function_key_config_doublepress=1\nfunction_key_config_doublepress_app_action=com.fsaint.androidagent/com.fsaint.androidagent.MainActivity\nfunction_key_config_doublepress_intent={\"intentUri\":\"intent:#Intent;action\\u003dandroid.intent.action.MAIN;category\\u003dandroid.intent.category.LAUNCHER;component\\u003dcom.fsaint.androidagent/.MainActivity;end\",\"type\":1}\nfunction_key_config_doublepress_selected_actions={\"key_camera\":\"key_take_selfie\",\"key_apps\":\"key_app\"}\nfunction_key_config_doublepress_selected_item=key_apps\nfunction_key_config_doublepress_type=2\nfunction_key_config_doublepress_value=com.fsaint.androidagent/com.fsaint.androidagent.MainActivity\n",
+  "remaining": [
+    "Fix and verify pre-unlock application initialization crash",
+    "Verify stable cover visibility, camera lifecycle, and model result",
+    "Repeat with known lock/fingerprint state",
+    "Restore original double-press assignment after experiment"
+  ]
+}

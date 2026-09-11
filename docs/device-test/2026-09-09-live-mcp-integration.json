@@ -1,0 +1,50 @@
+{
+  "date": "2026-09-09",
+  "scope": "Outbound no-auth HTTPS Streamable HTTP MCP integration",
+  "status": "automated_validation_passed_live_acceptance_pending",
+  "command": "JAVA_HOME=/opt/homebrew/opt/openjdk ./gradlew test :app:lintDebug :app:assembleDebug --no-daemon --max-workers=2",
+  "command_exit_code": 0,
+  "test_reports": {
+    "xml_files": 100,
+    "test_case_executions": 525,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "mcp_module_tests": 41,
+    "note": "Collected JVM/Robolectric reports include build variants; these are test-case executions, not unique device asks."
+  },
+  "lint": { "errors": 0, "warnings": 63 },
+  "apk": "app/build/outputs/apk/debug/app-debug.apk",
+  "coverage": [
+    "Saved configuration decoding, real discovery/provider/harness/dispatch path with deterministic fake network boundaries",
+    "Negotiated protocol versions 2025-11-25, 2025-06-18 and 2025-03-26; session/version headers",
+    "Paginated tools/list, missing tool capability, wrong response IDs and repeated cursors",
+    "JSON and multiline SSE, byte/depth bounds, malformed/truncated input, unsupported content types",
+    "Cancellation disconnects a blocked HTTP connection; own timeouts do not cancel caller conversations",
+    "Unsupported server-request rejection and observed list-changed notification",
+    "MCP grants, denied/forged calls without dispatch, distinct stable aliases, cache and refresh",
+    "Removal during suspended configuration reads cannot republish tools or dispatch stale bindings",
+    "Authentication failures and one-server timeout isolation",
+    "Session expiry without call replay, unknown outcomes, malformed-result rejection",
+    "Explicit text truncation and binary payload omission",
+    "Typed nested arguments, canonical JSON and versioned checkpoint failure outcomes; legacy decoding"
+  ],
+  "independent_review": "All substantive findings addressed; final read-only review approved.",
+  "physical_device_touched": false,
+  "installed": false,
+  "live_external_mcp_calls": false,
+  "live_model_calls": false,
+  "committed_or_pushed": false,
+  "limitations": [
+    "OAuth, arbitrary authentication headers, stdio, legacy HTTP+SSE, inbound listener, sampling, elicitation, tasks and remote resource fetching are not implemented in this increment.",
+    "Accepted input schemas use a conservative subset; references, regex constraints and unknown keywords are omitted with a notice.",
+    "Binary remote results are reported but not converted into deliverable artifacts.",
+    "Shared channel wiring was inspected; live Telegram/SMS/API/voice/photo/typed behavior with the user's server remains untested."
+  ],
+  "next_acceptance": [
+    "On request, install the debug APK without uninstalling or clearing data.",
+    "Open MCP settings and Refresh the existing saved server; verify Ready and tool count.",
+    "As owner, list that server's tools and explicitly request a known read-only tool.",
+    "Record sanitized real server/device evidence separately; never count fixture results as live acceptance."
+  ]
+}

@@ -30,6 +30,8 @@ import kotlinx.coroutines.launch
 class VoiceCaptureService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var turnStarted = false
+    private var startToken = -1L
+    private var latestStartId = 0
     private val controller: PushToTalkController
         get() = (application as DarkLordApplication).voiceTurn
 
@@ -40,10 +42,11 @@ class VoiceCaptureService : Service() {
                 when (state) {
                     is VoiceTurnState.Responding -> notify(state.text)
                     is VoiceTurnState.Error -> notify(state.reason.spokenMessage)
+                    VoiceTurnState.Recovering -> notify("Reconnecting speech…")
                     VoiceTurnState.Idle -> if (turnStarted) {
                         Log.i(TAG, "turn complete; stopping")
                         stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
+                        stopSelf(latestStartId)
                     }
                     else -> Unit
                 }
@@ -52,6 +55,7 @@ class VoiceCaptureService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
         when (intent?.action) {
             ACTION_RELEASE -> {
                 Log.i(TAG, "release")
@@ -64,6 +68,8 @@ class VoiceCaptureService : Service() {
     }
 
     private fun press() {
+        turnStarted = false
+        startToken = (application as DarkLordApplication).beginVoiceInteraction()
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "press without microphone permission")
             controller.fail(VoiceTurnError.MICROPHONE_PERMISSION)
@@ -71,12 +77,23 @@ class VoiceCaptureService : Service() {
             return
         }
         Log.i(TAG, "press")
-        startForeground(NOTIFICATION_ID, notification(getString(R.string.voice_capture_title)), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        try {
+            startForeground(NOTIFICATION_ID, notification(getString(R.string.voice_capture_title)), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+        } catch (_: RuntimeException) {
+            controller.fail(VoiceTurnError.MICROPHONE_PERMISSION)
+            stopSelf()
+            return
+        }
         turnStarted = true
         controller.pressed()
     }
 
     override fun onDestroy() {
+        val app = application as DarkLordApplication
+        if (turnStarted && app.interactions.isCurrent(startToken)) {
+            app.interactions.stop(startToken)
+            controller.shutdown()
+        }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -96,6 +113,10 @@ class VoiceCaptureService : Service() {
             .setContentTitle(getString(R.string.voice_capture_title))
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setContentIntent(android.app.PendingIntent.getActivity(this, 51,
+                Intent(this, com.fsaint.androidagent.MainActivity::class.java).putExtra("outside_chat", true),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE))
             .build()
     }
 

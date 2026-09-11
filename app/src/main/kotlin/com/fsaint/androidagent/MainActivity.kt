@@ -20,7 +20,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.fsaint.androidagent.policy.Principal
@@ -31,8 +35,16 @@ import com.fsaint.androidagent.ui.DebugScreen
 import com.fsaint.androidagent.ui.McpSettingsScreen
 import com.fsaint.androidagent.data.McpConfigurationEntity
 import com.fsaint.androidagent.runtime.CredentialOutcome
+import com.fsaint.androidagent.chat.ChatsScreen
+import androidx.activity.compose.BackHandler
 
 class MainActivity : ComponentActivity() {
+    private var entryVersion by mutableIntStateOf(0)
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        entryVersion++
+    }
     private val requestAssistantRole = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { }
@@ -70,14 +82,23 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Normal launch opens Chats. Samsung's Photo chat shortcut keeps its explicit capture target.
         AgentRuntimeNotificationFactory(this).ensureChannel()
         setContent {
+            key(entryVersion) {
             val darkLordApplication = application as DarkLordApplication
             var principalSettingsOpen by rememberSaveable { mutableStateOf(false) }
             var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
             var mcpSettingsOpen by rememberSaveable { mutableStateOf(false) }
+            var settingsOpen by rememberSaveable { mutableStateOf(intent.getBooleanExtra("settings", false)) }
+            val chatScreenState = rememberSaveableStateHolder()
             var localChatApiEnabled by remember { mutableStateOf(darkLordApplication.isLocalChatApiEnabled) }
-            if (mcpSettingsOpen) {
+            BackHandler(settingsOpen && !mcpSettingsOpen && !diagnosticsOpen && !principalSettingsOpen) { settingsOpen = false }
+            if (!settingsOpen) {
+                chatScreenState.SaveableStateProvider("chats") {
+                    ChatsScreen(darkLordApplication, intent.getStringExtra("chat_id"), intent.getBooleanExtra("outside_chat", false)) { settingsOpen = true }
+                }
+            } else if (mcpSettingsOpen) {
                 McpSettingsRoute(darkLordApplication) { mcpSettingsOpen = false }
             } else if (diagnosticsOpen) {
                 DebugScreen(darkLordApplication.diagnostics) { diagnosticsOpen = false }
@@ -92,6 +113,7 @@ class MainActivity : ComponentActivity() {
                 )
             } else {
                 OpenAssistantScreen(
+                    onOpenChats = { settingsOpen = false },
                     onRequestAssistantRole = ::requestAssistantRole,
                     onRequestCapabilityPermissions = ::requestCapabilityPermissions,
                     onRequestScreenCapture = ::requestScreenCapture,
@@ -130,6 +152,7 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(this@MainActivity, if (saved) "Telegram owner ID saved." else "Enter a numeric Telegram chat ID.", Toast.LENGTH_LONG).show()
                     },
                 )
+            }
             }
         }
     }
@@ -250,9 +273,12 @@ private fun PrincipalSettingsRoute(
 
 @Composable
 private fun McpSettingsRoute(application: DarkLordApplication, onBack: () -> Unit) {
+    val connectionStates by application.mcpConnections.states.collectAsState()
     var configurations by remember { mutableStateOf<List<McpConfigurationEntity>>(emptyList()) }
     LaunchedEffect(Unit) { configurations = application.mcpConfigurations() }
     McpSettingsScreen(
+        connectionStates = connectionStates,
+        onRefresh = application::refreshMcpServer,
         configurations = configurations,
         onAdd = { draft -> application.addMcpServer(draft).also { if (it.isSuccess) configurations = application.mcpConfigurations() } },
         onDelete = { id -> application.removeMcpServer(id); configurations = application.mcpConfigurations() },

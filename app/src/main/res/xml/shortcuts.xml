@@ -1,0 +1,13 @@
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="photo_conversation"
+        android:enabled="true"
+        android:icon="@drawable/dark_lord_icon"
+        android:shortcutShortLabel="@string/shortcut_photo_short"
+        android:shortcutLongLabel="@string/shortcut_photo_long">
+        <intent
+            android:action="com.fsaint.androidagent.action.PHOTO_CONVERSATION"
+            android:targetPackage="com.fsaint.androidagent"
+            android:targetClass="com.fsaint.androidagent.PhotoConversationActivity" />
+    </shortcut>
+</shortcuts>

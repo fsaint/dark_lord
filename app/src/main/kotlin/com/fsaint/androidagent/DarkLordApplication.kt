@@ -4,8 +4,12 @@ import android.app.Application
 import android.app.role.RoleManager
 import android.content.ComponentName
 import android.content.Intent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.UserManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
 import com.fsaint.androidagent.capabilities.accessibility.AccessibilityCapability
@@ -54,6 +58,7 @@ import com.fsaint.androidagent.data.McpConfigurationEntity
 import com.fsaint.androidagent.model.AgentEvent
 import com.fsaint.androidagent.model.ToolCall
 import com.fsaint.androidagent.model.ToolResult
+import com.fsaint.androidagent.model.ToolError
 import com.fsaint.androidagent.model.AuditRecord
 import com.fsaint.androidagent.model.AuthorizationDecision
 import com.fsaint.androidagent.model.PrincipalRole
@@ -70,6 +75,8 @@ import com.fsaint.androidagent.runtime.LegacyModelProvider
 import com.fsaint.androidagent.runtime.PlannedAction
 import com.fsaint.androidagent.runtime.VerificationEngine
 import com.fsaint.androidagent.runtime.ConversationHarness
+import com.fsaint.androidagent.runtime.ConversationImage
+import com.fsaint.androidagent.runtime.ConversationRequest
 import com.fsaint.androidagent.runtime.OpenAiHttpClient
 import com.fsaint.androidagent.runtime.OwnerOnlyOpenAiCredentialStore
 import com.fsaint.androidagent.runtime.OwnerOnlyTelegramBotCredentialStore
@@ -100,7 +107,6 @@ import com.chaquo.python.android.AndroidPlatform
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.fsaint.androidagent.capabilities.camera.CameraCaptureRequest
-import com.fsaint.androidagent.capabilities.camera.CameraCaptureOutcome
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -109,6 +115,15 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.CancellationException
+import com.fsaint.androidagent.data.ChatRepository
+import com.fsaint.androidagent.runtime.ChatTurnCoordinator
+import com.fsaint.androidagent.voice.InteractionGate
+import com.fsaint.androidagent.voice.Speaker
+import com.fsaint.androidagent.voice.VoiceTurnError
 
 /** Application lifecycle adapter that preserves Telegram's durable shutdown boundary. */
 internal class TelegramUpdatesLifecycle(
@@ -130,6 +145,24 @@ internal class ApplicationShutdownLifecycle(
 }
 
 class DarkLordApplication : Application() {
+    private val unlockedInitialization = UnlockedInitialization()
+    private var unlockReceiver: BroadcastReceiver? = null
+    val photoConversations by lazy { PhotoConversationStore(this) }
+    val chats by lazy { ChatRepository(database) }
+    val textChats by lazy { com.fsaint.androidagent.chat.ChatTasks(CoroutineScope(applicationSupervisor + Dispatchers.Main.immediate)) { chatId, text, selected ->
+        runChatMessage(chatId, text, selectedArtifactId = selected)
+    } }
+    private val chatRecovery by lazy { applicationScope.async { chats.recover(); artifactStore.reconcileChatReferences(chats.attachmentReferences()) } }
+    private val chatTurns by lazy {
+        ChatTurnCoordinator(chats,
+            readImage = { id -> artifactStore.read(id)?.let { ConversationImage(it.first.mimeType, it.second) } },
+            retain = { (id, ref) -> artifactStore.retain(id, "chat:$ref") },
+            release = { (id, ref) -> artifactStore.release(id, "chat:$ref") },
+            runModel = { request -> conversationHarness.run(request.copy(onToolResult = { index, call, result ->
+                android.util.Log.i("DarkLordTools", "channel=${request.session.channel} request=${request.event.id} turn=$index tool=${call.name} success=${result.success} error=${result.error} verification=${result.verification}")
+                request.onToolResult?.invoke(index, call, result)
+            })) })
+    }
     private val applicationSupervisor = SupervisorJob()
     private val applicationScope = CoroutineScope(applicationSupervisor + Dispatchers.IO)
     private val localChatPreferences by lazy { getSharedPreferences("local_chat_api", MODE_PRIVATE) }
@@ -166,6 +199,13 @@ class DarkLordApplication : Application() {
     private val screenCapability by lazy { ScreenCapability(screenCaptureAdapter) }
     private val scopes = ScopeRegistry()
     private val mcpCatalog = ConcurrentHashMap.newKeySet<String>()
+    val mcpConnections by lazy {
+        com.fsaint.androidagent.mcp.McpConnectionManager(
+            configurations = { durableState.mcpConfigurations().map { com.fsaint.androidagent.mcp.decodeMcpConfiguration(it.id, it.name, it.configuration) } },
+            scopes = scopes,
+            client = com.fsaint.androidagent.mcp.LiveMcpClient(com.fsaint.androidagent.mcp.UrlConnectionMcpTransport()),
+        )
+    }
     private val skillCatalog = ConcurrentHashMap.newKeySet<String>()
     private val telegramOwnerChat by lazy { TelegramOwnerChatStore(this) }
     private val browserTools by lazy { BrowserTools() }
@@ -235,6 +275,7 @@ class DarkLordApplication : Application() {
             agentTools,
             RoomConversationCheckpointStore(DurableStateRepository(database.durableStateDao())),
             toolEffects = eventStore,
+            extension = com.fsaint.androidagent.runtime.McpConversationExtension(mcpConnections),
         )
     }
     private val eventStore by lazy { EventRepository(database.eventDao()) }
@@ -242,13 +283,36 @@ class DarkLordApplication : Application() {
     val ownerProvisioning by lazy { OwnerProvisioningService(principals, auditStore) }
     private val phoneNumbers by lazy { AndroidPhoneNumberNormalizer(this) }
     private val speaker by lazy { AndroidTtsSpeaker(this) }
+    val interactions by lazy {
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        InteractionGate(speaker) { callback -> main.post { callback() }; Unit }
+    }
+    var voiceGeneration: Long = 0L
+        private set
+    private var outsideChatId: String? = null
+    private val voiceSpeaker = object : Speaker {
+        override fun speak(text: String, onDone: () -> Unit) = interactions.speaker(voiceGeneration).speak(text, onDone)
+        override fun stop() = interactions.speaker(voiceGeneration).stop()
+        override fun shutdown() = stop()
+    }
+    fun beginLocalInteraction(): Long {
+        val token = interactions.begin()
+        outsideChatId?.let { textChats.stop(it) }
+        voiceTurn.cancel()
+        photoConversations.state.value?.takeIf { !it.terminal }?.let {
+            photoConversations.publish(it.copy(phase = PhotoPhase.ERROR, text = "Photo conversation interrupted."))
+        }
+        return token
+    }
+    fun beginVoiceInteraction(): Long = beginLocalInteraction().also { voiceGeneration = it }
     /** One push-to-talk turn at a time; the assistant session and the capture service drive it. */
     val voiceTurn: PushToTalkController by lazy {
         PushToTalkController(
-            recognizer = AndroidSpeechRecognizerPort(this) { voiceTurn },
+            recognizer = AndroidSpeechRecognizerPort(this) { voiceTurn.eventsForCurrentTurn() },
             turns = TurnDispatcher { transcript -> dispatchVoiceTranscript(transcript) },
-            speaker = speaker,
-            scope = applicationScope,
+            speaker = voiceSpeaker,
+            scope = CoroutineScope(applicationSupervisor + Dispatchers.Main.immediate),
+            diagnostic = { android.util.Log.i("DarkLordVoice", it) },
         )
     }
     private val replies: com.fsaint.androidagent.runtime.ReplySender by lazy {
@@ -296,9 +360,33 @@ class DarkLordApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!getSystemService(UserManager::class.java).isUserUnlocked) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    if (intent.action == Intent.ACTION_USER_UNLOCKED) initializeAfterUnlock()
+                }
+            }
+            unlockReceiver = receiver
+            ContextCompat.registerReceiver(this, receiver, IntentFilter(Intent.ACTION_USER_UNLOCKED), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+        // Also recheck after registering: unlock may race application creation.
+        initializeAfterUnlock()
+    }
+
+    internal fun initializeAfterUnlock() {
+        unlockedInitialization.initialize(getSystemService(UserManager::class.java).isUserUnlocked) {
+            initializeCredentialRuntime()
+        }
+        if (getSystemService(UserManager::class.java).isUserUnlocked) {
+            unlockReceiver?.let { unregisterReceiver(it) }
+            unlockReceiver = null
+        }
+    }
+
+    private fun initializeCredentialRuntime() {
+        chatRecovery
         if (localChatPreferences.getBoolean("enabled", false)) localChatApi.start()
         if (!Python.isStarted()) Python.start(AndroidPlatform(this))
-        artifactStore.cleanup()
         applicationScope.launch {
             mcpCatalog += durableState.mcpConfigurations().map { it.id }
             skillCatalog += durableState.enabledSkillIds()
@@ -340,7 +428,7 @@ class DarkLordApplication : Application() {
         if (enabled) localChatApi.start() else localChatApi.stop()
     }
 
-    private suspend fun processLocalChat(text: String): String {
+    private suspend fun processLocalChat(text: String): LocalChatReply {
         require(text.isNotBlank()) { "Message is required" }
         require(text.length <= 16_384) { "Message is too long" }
         val owner = principals.owner() ?: error("No owner is configured")
@@ -357,15 +445,95 @@ class DarkLordApplication : Application() {
                 userText = text,
             ),
         )
-        return result.response ?: "The agent did not produce a final response."
+        return LocalChatReply.from(result)
+    }
+
+    /** Captures one owner-authorized foreground photo and asks the multimodal agent for next steps. */
+    internal suspend fun capturePhotoForConversation(): ConversationImage {
+        principals.owner() ?: throw PhotoConversationFailure("Set up an owner in Dark Lord first.")
+        val capture = cameraCapability.capture(
+            CameraCaptureRequest(maxWidth = 1280, maxHeight = 1280, maxBytes = 4_000_000),
+        )
+        val image = capture.payload ?: throw PhotoConversationFailure(when (capture.error) {
+            ToolError.PERMISSION_REQUIRED -> "Camera permission is required before I can take a picture."
+            ToolError.DEVICE_BUSY -> "The camera is busy right now. Try again in a moment."
+            ToolError.OS_RESTRICTED -> "Android is restricting camera access right now."
+            ToolError.UNSUPPORTED -> "This phone does not support still image capture."
+            ToolError.NOT_FOUND -> "I could not find a usable camera."
+            ToolError.TIMEOUT -> "The camera took too long to respond."
+            else -> "I couldn't take the picture."
+        })
+        return ConversationImage(image.mimeType, image.bytes)
     }
 
     /** Runs a spoken request through the same runtime, tools, MCP servers, and skills as the owner's chat. */
     private suspend fun dispatchVoiceTranscript(transcript: String): Boolean {
         principals.owner() ?: return false
-        val now = System.currentTimeMillis()
-        dispatch(AgentEvent("voice:$now", "voice.transcript", "voice", now, mapOf("body" to transcript)), "VOICE")
+        val token = voiceGeneration
+        currentCoroutineContext()[Job]?.let { interactions.attach(token, it) }
+        try {
+            val chat = outsideChat()
+            val answer = runChatMessage(chat.id, transcript, "VOICE", expectedGeneration = token)
+            withContext(Dispatchers.Main.immediate) { if (interactions.isCurrent(token)) voiceTurn.replyReady(answer) }
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) {
+            withContext(Dispatchers.Main.immediate) { if (interactions.isCurrent(token)) voiceTurn.fail(VoiceTurnError.MODEL_UNAVAILABLE) }
+        }
         return true
+    }
+
+    suspend fun outsideChat(): com.fsaint.androidagent.runtime.Chat {
+        chatRecovery.await()
+        val owner = principals.owner() ?: throw PhotoConversationFailure("Set up an owner in Dark Lord first.")
+        return chats.outside(owner.id).also { outsideChatId = it.id }
+    }
+
+    suspend fun newOutsideChat(): com.fsaint.androidagent.runtime.Chat {
+        val old = outsideChat()
+        return chats.newOutside(old.ownerId).also { outsideChatId = it.id }
+    }
+
+    suspend fun runChatMessage(chatId: String, text: String, source: String = "LOCAL_API",
+        requestId: String = java.util.UUID.randomUUID().toString(), artifactId: String? = null,
+        selectedArtifactId: String? = null, expectedGeneration: Long? = null, preparedPhoto: Boolean = false): String = withContext(Dispatchers.IO) {
+        chatRecovery.await()
+        val owner = principals.owner() ?: throw PhotoConversationFailure("Set up an owner in Dark Lord first.")
+        val session = scopes.sessionFor(owner, source)
+        val request = ConversationRequest(session,
+            AgentEvent(requestId, "chat.message", source, System.currentTimeMillis(), mapOf("body" to text)),
+            ScopedContextBuilder(scopes, emptyMap(), agentTools.availableToolIds, mcpCatalog, skillCatalog).build(session), text)
+        chatTurns.run(request, chatId, artifactId, selectedArtifactId, preparedPhoto) { expectedGeneration == null || interactions.isCurrent(expectedGeneration) }
+    }
+
+    suspend fun preparePhotoRequest(chatId: String, requestId: String, text: String, token: Long) {
+        val owner = requireNotNull(principals.owner())
+        check(chats.begin(owner.id, chatId, requestId, text, "CAPTURE", supersede = true) { interactions.isCurrent(token) })
+    }
+
+    suspend fun attachPhotoRequest(requestId: String, artifactId: String, token: Long) = withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+        if (!interactions.isCurrent(token)) throw CancellationException("Capture superseded")
+        val owner = requireNotNull(principals.owner())
+        artifactStore.retain(artifactId, "chat:$requestId")
+        try {
+            if (!interactions.isCurrent(token)) throw CancellationException("Capture superseded")
+            chats.attachPhoto(owner.id, requestId, artifactId) { interactions.isCurrent(token) }
+        } catch (error: Exception) { artifactStore.release(artifactId, "chat:$requestId"); throw error }
+    }
+
+    suspend fun finishUnansweredPhoto(requestId: String, interrupted: Boolean) = withContext(kotlinx.coroutines.NonCancellable + Dispatchers.IO) {
+        val owner = principals.owner() ?: return@withContext
+        val request = chats.request(owner.id, requestId) ?: return@withContext
+        if (request.state != "RUNNING") return@withContext
+        val saved = chats.messages(owner.id, request.chatId).any { it.requestId == requestId && it.artifactId != null }
+        chats.finish(owner.id, requestId, if (saved) "Photo saved, but analysis was interrupted. You can ask about it." else "No new photo was saved. Any earlier images are from previous captures.", if (interrupted) "INTERRUPTED" else "FAILED")
+    }
+
+    suspend fun storeChatPhoto(image: ConversationImage): String = withContext(Dispatchers.IO) { artifactStore.store(image.bytes, image.mimeType).id }
+
+    suspend fun readChatPhoto(chatId: String, id: String): ByteArray? = withContext(Dispatchers.IO) {
+        val owner = principals.owner() ?: return@withContext null
+        require(chats.messages(owner.id, chatId).any { it.artifactId == id }) { "Photo unavailable" }
+        artifactStore.read(id)?.second
     }
 
     private fun captureArtifactHandler(): suspend (com.fsaint.androidagent.model.ToolCall) -> com.fsaint.androidagent.model.ToolResult<Any> = { call ->
@@ -487,14 +655,23 @@ class DarkLordApplication : Application() {
 
     suspend fun mcpConfigurations(): List<McpConfigurationEntity> = durableState.mcpConfigurations()
     suspend fun addMcpServer(draft: com.fsaint.androidagent.ui.McpServerDraft): Result<Unit> = runCatching {
+        requireNotNull(principals.owner()) { "Set up an owner before adding an MCP server." }
         require(draft.name.isNotBlank()) { "Enter a display name." }
-        require(draft.endpoint.startsWith("https://")) { "MCP endpoints must use HTTPS." }
+        com.fsaint.androidagent.mcp.validateMcpEndpoint(draft.endpoint)
         require(draft.endpoint.length <= 512) { "Endpoint is too long." }
         val id = java.util.UUID.randomUUID().toString()
         durableState.save(McpConfigurationEntity(id, draft.name.take(80), com.fsaint.androidagent.ui.encodeMcpDraft(draft)))
         mcpCatalog += id
+        applicationScope.launch { runCatching { refreshMcpServer(id) } }
     }
-    suspend fun removeMcpServer(id: String) { durableState.deleteMcpConfiguration(id); mcpCatalog.remove(id) }
+    suspend fun removeMcpServer(id: String) {
+        requireNotNull(principals.owner())
+        durableState.deleteMcpConfiguration(id); mcpCatalog.remove(id); mcpConnections.invalidate(id)
+    }
+    suspend fun refreshMcpServer(id: String) = withContext(Dispatchers.IO) {
+        val owner = requireNotNull(principals.owner())
+        mcpConnections.refresh(scopes.sessionFor(owner, "LOCAL_API"), id)
+    }
 
     fun acceptScreenCaptureGrant(resultCode: Int, data: Intent?) {
         screenCaptureAdapter.acceptGrant(resultCode, data)

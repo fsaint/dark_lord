@@ -16,7 +16,10 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_USER_UNLOCKED -> scheduler.enqueue(context)
+            Intent.ACTION_USER_UNLOCKED -> {
+                (context.applicationContext as? DarkLordApplication)?.initializeAfterUnlock()
+                scheduler.enqueue(context)
+            }
             Intent.ACTION_LOCKED_BOOT_COMPLETED,
             null -> return
             else -> return

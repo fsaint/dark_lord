@@ -16,6 +16,17 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PushToTalkControllerTest {
+    @Test fun oldRecognizerCannotSupplyTranscriptToReplacementTurn() = runTest {
+        val turns = FakeTurns(true)
+        val controller = controller(turns = turns)
+        controller.pressed()
+        val old = controller.eventsForCurrentTurn()
+        controller.pressed()
+        old.transcript("stale")
+        runCurrent()
+        assertTrue(turns.dispatched.isEmpty())
+        assertEquals(VoiceTurnState.Listening, controller.state.value)
+    }
     private val recognizer = RecordingRecognizer()
     private val speaker = FakeSpeaker()
 
@@ -54,7 +65,7 @@ class PushToTalkControllerTest {
         controller.endOfSpeech()
 
         assertEquals(VoiceTurnState.Finalizing, controller.state.value)
-        assertEquals(listOf("start", "stop"), recognizer.calls)
+        assertEquals(listOf("start"), recognizer.calls)
     }
 
     @Test
@@ -121,7 +132,7 @@ class PushToTalkControllerTest {
     }
 
     @Test
-    fun finalizeTimeoutCancelsRecognizerAndSpeaksNoSpeech() = runTest {
+    fun finalizeTimeoutCancelsRecognizerAndSpeaksTimeout() = runTest {
         val controller = controller()
         controller.pressed()
         controller.released()
@@ -129,9 +140,9 @@ class PushToTalkControllerTest {
         advanceTimeBy(3_001)
         runCurrent()
 
-        assertEquals(VoiceTurnState.Error(VoiceTurnError.NO_SPEECH), controller.state.value)
+        assertEquals(VoiceTurnState.Error(VoiceTurnError.RECOGNITION_TIMEOUT), controller.state.value)
         assertEquals(listOf("start", "stop", "cancel"), recognizer.calls)
-        assertEquals(listOf(VoiceTurnError.NO_SPEECH.spokenMessage), speaker.spoken)
+        assertEquals(listOf(VoiceTurnError.RECOGNITION_TIMEOUT.spokenMessage), speaker.spoken)
     }
 
     @Test
@@ -220,21 +231,21 @@ class PushToTalkControllerTest {
     }
 
     @Test
-    fun pressWhileListeningFinalizingOrThinkingIsIgnored() = runTest {
+    fun pressWhileListeningFinalizingOrThinkingReplacesTheTurn() = runTest {
         val controller = controller()
         controller.pressed()
         controller.pressed()
-        assertEquals(listOf("start"), recognizer.calls)
+        assertEquals(listOf("start", "cancel", "start"), recognizer.calls)
 
         controller.released()
         controller.pressed()
-        assertEquals(VoiceTurnState.Finalizing, controller.state.value)
+        assertEquals(VoiceTurnState.Listening, controller.state.value)
 
         controller.transcript("hello")
         runCurrent()
         controller.pressed()
-        assertEquals(VoiceTurnState.Thinking, controller.state.value)
-        assertEquals(listOf("start", "stop"), recognizer.calls)
+        assertEquals(VoiceTurnState.Listening, controller.state.value)
+        assertEquals(4, recognizer.calls.count { it == "start" })
     }
 
     @Test
@@ -290,16 +301,16 @@ class PushToTalkControllerTest {
         controller.released()
         advanceTimeBy(3_001)
         runCurrent()
-        assertEquals(VoiceTurnState.Error(VoiceTurnError.NO_SPEECH), controller.state.value)
+        assertEquals(VoiceTurnState.Error(VoiceTurnError.RECOGNITION_TIMEOUT), controller.state.value)
 
         // The cancelled recognizer reports its own error afterwards; it must not speak a second message.
         controller.fail(VoiceTurnError.RECOGNIZER)
-        assertEquals(VoiceTurnState.Error(VoiceTurnError.NO_SPEECH), controller.state.value)
+        assertEquals(VoiceTurnState.Error(VoiceTurnError.RECOGNITION_TIMEOUT), controller.state.value)
 
         speaker.completeLast()
         controller.fail(VoiceTurnError.NO_SPEECH)
         assertEquals(VoiceTurnState.Idle, controller.state.value)
-        assertEquals(listOf(VoiceTurnError.NO_SPEECH.spokenMessage), speaker.spoken)
+        assertEquals(listOf(VoiceTurnError.RECOGNITION_TIMEOUT.spokenMessage), speaker.spoken)
     }
 
     @Test

@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:policy"))
     implementation(libs.kotlinx.coroutines.core)
+    api("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     testImplementation(kotlin("test"))
     testImplementation(libs.junit.jupiter)

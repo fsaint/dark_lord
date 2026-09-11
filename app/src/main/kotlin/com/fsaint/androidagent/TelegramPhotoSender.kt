@@ -22,7 +22,7 @@ class TelegramPhotoSender(
         "telegram.send_photo" to { call ->
             val artifactId = call.arguments["artifactId"].orEmpty()
             val chatId = call.arguments["chatId"]?.takeIf(String::isNotBlank) ?: ownerChatId()
-            if (chatId.isNullOrBlank()) return@to ToolResult(false, error = ToolError.PERMISSION_REQUIRED)
+            if (chatId.isNullOrBlank()) return@to ToolResult(false, payload = "Telegram owner chat id is not set. Ask the owner to save it in Dark Lord Settings.", error = ToolError.PERMISSION_REQUIRED)
             val artifact = artifacts.read(artifactId).takeIf { artifactId.isNotBlank() }
                 ?: artifacts.latest("image/")
                 ?: return@to ToolResult(false, error = ToolError.NOT_FOUND)
@@ -32,7 +32,7 @@ class TelegramPhotoSender(
     )
 
     private suspend fun send(chatId: String, mimeType: String, bytes: ByteArray): ToolResult<Any> = withContext(Dispatchers.IO) {
-        val token = runCatching { tokenProvider.apiToken() }.getOrElse { return@withContext ToolResult(false, error = ToolError.PERMISSION_REQUIRED) }
+        val token = runCatching { tokenProvider.apiToken() }.getOrElse { return@withContext ToolResult(false, payload = "Telegram bot token is not saved. Ask the owner to save it in Dark Lord Settings.", error = ToolError.PERMISSION_REQUIRED) }
         val boundary = "DarkLord-${UUID.randomUUID()}"
         val endpoint = URL("https://api.telegram.org/bot$token/sendPhoto")
         val connection = (endpoint.openConnection() as HttpURLConnection).apply {

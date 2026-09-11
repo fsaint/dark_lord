@@ -1,0 +1,70 @@
+{
+  "feature": "Persistent named chats, Outside photo/voice history, and speech interruption",
+  "date": "2026-09-09",
+  "branch": "master",
+  "status": "automated_verification_passed_physical_acceptance_pending",
+  "physical_phone_modified": false,
+  "committed": false,
+  "pushed": false,
+  "apk": {
+    "path": "app/build/outputs/apk/debug/app-debug.apk",
+    "sha256": "35b06efa18278dc21e5f3a95e26a499f655b9e270c0f4a3cf136f04df9e02ff9"
+  },
+  "verification": [
+    {
+      "command": "JAVA_HOME=/opt/homebrew/opt/openjdk ./gradlew test :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon --max-workers=2",
+      "result": "BUILD SUCCESSFUL",
+      "log": "/tmp/dark-lord-chats-verification-final.log"
+    },
+    {
+      "command": "JAVA_HOME=/opt/homebrew/opt/openjdk ./gradlew :app:assembleDebugAndroidTest --no-daemon --max-workers=2",
+      "result": "BUILD SUCCESSFUL after the final instrumentation wait correction",
+      "log": "/tmp/dark-lord-chats-ui-build-final.log"
+    },
+    {
+      "device": "emulator-5580",
+      "environment": "API 36.1 disposable emulator data directory, read-only AVD, no owner keys or live model requests",
+      "command": "adb -s emulator-5580 shell am instrument -w -e class com.fsaint.androidagent.ChatsUiTest com.fsaint.androidagent.test/androidx.test.runner.AndroidJUnitRunner",
+      "result": "OK (1 test)",
+      "seconds": 9.312,
+      "covers": ["Outside selection and archiving", "named-chat creation", "Settings round trip", "persisted messages after activity recreation", "unsent draft after navigation and activity recreation"],
+      "log": "/tmp/dark-lord-chats-ui-final-2.log",
+      "safety": "Fixture test skips non-emulator hardware. Only explicit emulator serial install -r and instrumentation were used; no physical install, clear data, uninstall, or Gradle connected tests."
+    },
+    {
+      "command": "git diff --check",
+      "result": "PASS"
+    }
+  ],
+  "focused_host_coverage": {
+    "ChatRepositoryTest": "7 passed: ownership, archival, idempotency, restart/reopen, supersession before old cleanup, stale attach/admission rollback, late tool outcomes",
+    "ChatMigrationTest": "1 passed: populated version-6 SQLite fixture migrated to Room version 7 under Robolectric, preserving owner and legacy messages",
+    "ChatTurnCoordinatorTest": "3 passed: actual saved image follow-up, isolated named-chat context, fresh tool transcript, interrupted photo retention, prepared capture without duplicate input",
+    "ChatContextTest": "2 passed: bounded history and explicit/latest image selection",
+    "ArtifactStoreTest": "8 passed: durable metadata, retention, reconciliation, quota, corrupt metadata, and existing artifact behavior",
+    "InteractionGateTest": "3 passed: stale generations/callbacks, old lease cleanup, main-dispatched callbacks outside the gate monitor",
+    "ChatTasksTest": "2 passed: silent app-owned typed requests, busy refusal and Stop",
+    "other": "Full suite also includes provider structured multimodal JSON, HTTP cancellation, voice-controller/recognizer generation regression, and photo runner tests."
+  },
+  "resolved_during_verification": [
+    "API 36 Espresso reflection incompatibility resolved with test-only espresso-core 3.7.0",
+    "New Outside asynchronous completion no longer undoes Back navigation",
+    "UI test waits for database-backed detail content instead of matching text still in the name editor",
+    "Rapid new photo admission durably interrupts the prior request without waiting for hardware cleanup",
+    "Generation checks inside Room transactions roll back stale photo attachments and admission"
+  ],
+  "not_tested": [
+    "Physical phone upgrade and preservation of its configured owner, credentials and permissions",
+    "Live OpenAI photo-to-voice conversation",
+    "Physical folded/secure-lock capture and recognition",
+    "Audible speech cutoff latency or the under-100ms app dispatch target",
+    "Physical reboot/unlock acceptance",
+    "The phone local chat API suite and live SMS/Telegram transport regression"
+  ],
+  "manual_next": [
+    "On a separately requested non-destructive install -r upgrade, confirm existing owner, keys, permissions and Samsung Photo chat mapping remain",
+    "Double press for a photo; long press during its answer and ask about a visible detail without recapturing",
+    "Double press during a voice answer; verify old speech stops, one new photo is saved, and no stale answer speaks",
+    "Reopen and reboot/unlock; verify history/photos remain without replay, then archive with New Outside chat"
+  ]
+}

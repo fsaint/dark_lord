@@ -49,13 +49,14 @@ fun OpenAssistantScreen(
     onOpenRuntimeNotificationSettings: () -> Unit = {},
     localChatApiEnabled: Boolean = false,
     onLocalChatApiEnabledChange: (Boolean) -> Unit = {},
+    onOpenChats: () -> Unit = {},
 ) {
     var apiKey by remember { mutableStateOf("") }
     var telegramToken by remember { mutableStateOf("") }
     var telegramOwnerChatId by remember { mutableStateOf("") }
     DarkLordTheme {
         Scaffold(
-            topBar = { TopAppBar(title = { Text("Dark Lord") }) },
+            topBar = { TopAppBar(title = { Text("Settings") }, navigationIcon = { androidx.compose.material3.TextButton(onClick = onOpenChats) { Text("Chats") } }) },
         ) { insets ->
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding()

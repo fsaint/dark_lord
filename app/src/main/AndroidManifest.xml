@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -39,6 +41,9 @@
         <activity
             android:name=".MainActivity"
             android:exported="true">
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -56,6 +61,38 @@
                 <data android:scheme="mmsto" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".PhotoConversationActivity"
+            android:exported="true"
+            android:label="Dark Lord photo conversation">
+            <!-- Camera launch contract: opens our photo conversation. This is not
+                 IMAGE_CAPTURE, which must return an image to the calling app. -->
+            <intent-filter>
+                <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.APP_CAMERA" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.fsaint.androidagent.action.PHOTO_CONVERSATION" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity-alias
+            android:name=".PhotoConversationShortcut"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@drawable/dark_lord_icon"
+            android:label="@string/shortcut_photo_long"
+            android:targetActivity=".PhotoConversationActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
         <activity
             android:name=".ui.DialerActivity"
             android:exported="true">
@@ -161,6 +198,10 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="user_authorized_persistent_agent_runtime" />
         </service>
+        <service
+            android:name=".PhotoConversationService"
+            android:exported="false"
+            android:foregroundServiceType="camera|mediaPlayback" />
         <receiver
             android:name=".BootReceiver"
             android:directBootAware="true"

@@ -17,7 +17,9 @@ tasks.withType<JavaCompile>().configureEach {
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:policy"))
+    implementation(project(":core:mcp"))
     implementation(libs.kotlinx.coroutines.core)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     testImplementation(project(":test-support"))
     testImplementation(kotlin("test"))

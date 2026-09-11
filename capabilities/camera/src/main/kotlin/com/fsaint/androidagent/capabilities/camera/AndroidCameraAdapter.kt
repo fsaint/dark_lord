@@ -18,6 +18,7 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Size
+import android.util.Log
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
@@ -316,6 +317,7 @@ class AndroidCameraAdapter(context: Context) : CameraAdapter {
             val image = source.acquireLatestImage() ?: return@setOnImageAvailableListener
             image.use {
                 val buffer = it.planes.first().buffer
+                Log.i(TAG, "still image available: ${buffer.remaining()} bytes, ${size.width}x${size.height}")
                 if (buffer.remaining() > request.maxBytes) {
                     complete(CameraCaptureOutcome.OsRestricted)
                 } else {
@@ -397,6 +399,7 @@ class AndroidCameraAdapter(context: Context) : CameraAdapter {
                                     request: CaptureRequest,
                                     failure: CaptureFailure,
                                 ) {
+                                    Log.e(TAG, "still capture failed: reason=${failure.reason}, frame=${failure.frameNumber}")
                                     complete(CameraCaptureOutcome.Failed)
                                 }
 
@@ -414,6 +417,7 @@ class AndroidCameraAdapter(context: Context) : CameraAdapter {
                 }
 
                 override fun onConfigureFailed(session: CameraCaptureSession) {
+                    Log.e(TAG, "still capture session configuration failed")
                     complete(CameraCaptureOutcome.DeviceBusy)
                 }
             },
@@ -421,6 +425,8 @@ class AndroidCameraAdapter(context: Context) : CameraAdapter {
         )
     }
 }
+
+private const val TAG = "DarkLordCamera"
 
 private const val SAFE_VIDEO_WIDTH = 1280
 private const val SAFE_VIDEO_HEIGHT = 720

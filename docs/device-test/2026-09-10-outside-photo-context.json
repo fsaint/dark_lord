@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-10",
+  "issue": "Outside repeatedly describes an earlier chat photo",
+  "cause_verified_in_code_and_tests": "Saved images were serialized as attachments on the newest user message, without distinguishing them from fresh captures.",
+  "change": "Historical images now appear in a labeled reference section before conversation history. Only a newly captured image is attached to the current message. Instructions prioritize the current question and discourage unsolicited repeated photo descriptions.",
+  "regression_red": {
+    "provider": "2 tests failed on old behavior",
+    "coordinator": "2 tests failed on old behavior"
+  },
+  "validation": {
+    "command": "JAVA_HOME=/opt/homebrew/opt/openjdk ./gradlew test :app:lintDebug :app:assembleDebug --no-daemon --max-workers=2",
+    "exit_code": 0,
+    "test_case_executions_including_variants": 529,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint_errors": 0,
+    "lint_warnings": 63,
+    "diff_check": "passed"
+  },
+  "device": {
+    "model": "SM-F711U1",
+    "install": "successful in-place debug update; no uninstall or data clearing",
+    "launch": "MainActivity Status: ok; app process running",
+    "recent_android_runtime_errors": "none in the inspected log window",
+    "first_install_time_unchanged": true
+  },
+  "live_acceptance": {
+    "outside_conversation": "pending operator check; fixture tests verify request structure, not live model behavior",
+    "tailscale_api_health": "connection timed out before installation",
+    "note": "The local chat API is stateless and does not exercise the persistent Outside chat path. No camera capture, SMS, calls, or broad device test suite was triggered.",
+    "suggested_check": "In the existing Outside chat, ask What is my battery level?, then ask a specific follow-up about the saved photo. The first answer should address battery; the second should still use the photo."
+  }
+}

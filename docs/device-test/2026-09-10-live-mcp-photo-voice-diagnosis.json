@@ -1,0 +1,75 @@
+{
+  "date": "2026-09-10",
+  "device": "SM-F711U1",
+  "installed_build_last_update": "2026-09-10 08:18:38 device time",
+  "scope": "Read-only diagnosis and focused live API tests; one requested camera capture",
+  "transport": {
+    "tailscale": "No Tailscale IPv4 interface on phone during checks",
+    "api_initial_state": "Disabled",
+    "test_setup": "Temporarily enabled Local chat API through app UI; used adb USB port forwarding",
+    "health": { "ok": true, "running": true },
+    "cleanup": "Restored API to disabled; removed temporary USB forward and UI dump"
+  },
+  "suite": {
+    "command": "python3 tools/chat_api_test.py --url http://127.0.0.1:61452 --case battery --case mcp_inventory --case picture_metadata --timeout 90 --report /tmp/dark-lord-mcp-photo-api-2026-09-10.json",
+    "raw_runner_result": "3/3 PASS",
+    "warning": "Runner checks nonempty HTTP replies, not task correctness. Two cases failed semantic review.",
+    "semantic_results": [
+      { "case": "battery", "result": "reply received", "reply": "The current battery level is at 100%." },
+      { "case": "picture_metadata", "result": "partial failure", "capture": "confirmed file exists", "metadata_followup": "NOT_FOUND" },
+      { "case": "mcp_inventory", "result": "failure", "reason": "Claimed configured-server details were unavailable despite Settings showing Ready: 34 tools." }
+    ]
+  },
+  "mcp": {
+    "saved_server_display_name": "test",
+    "endpoint": "omitted; opaque endpoint path may be sensitive",
+    "settings_status": "Ready: 34 tools",
+    "read_only_probe": "Explicitly requested whoami once, without personal account details",
+    "probe_reply": "The call to the whoami tool succeeded.",
+    "evidence_limit": "API returns final text only, not a structured tool execution trace; call success is model-reported.",
+    "inventory_followup": "When explicitly directed to supplied inventory, model listed all 34 tool descriptions but confused tools with server entries.",
+    "assessment": "Discovery is working; model capability/status reporting is unreliable, not evidence of an unavailable connection."
+  },
+  "pictures": {
+    "test_artifact_id": "artifact_2cf12e31-8b93-45ff-aef8-2cfd97f77f6f",
+    "file_size_bytes": 563324,
+    "mime": "image/jpeg",
+    "header": "ff d8 ff e1; Exif signature present",
+    "metadata_file": "exists and matches size, MIME and creation time returned by capture",
+    "existing_image_description_reply": "I couldn't complete artifact.metadata: NOT_FOUND.",
+    "python_workaround_request": "Also ended with artifact.metadata NOT_FOUND; did not establish a successful workaround.",
+    "code_finding": "OpenAiResponsesProvider advertises artifact.metadata and artifact.open with an empty parameter schema and additionalProperties=false, while their handlers require artifactId.",
+    "vision_boundary": "artifact.open returns byte-array tool data; ordinary tool-result serialization is text, not multimodal input. Fixing the argument schema alone will not establish API image understanding.",
+    "outside_boundary": "POST /chat calls the stateless harness, not ChatTurnCoordinator; it cannot test persistent Outside history or the prior-photo fix end to end.",
+    "retention": "Test image remains in app artifact storage under its normal retention policy."
+  },
+  "voice": {
+    "microphone_permission": "granted",
+    "recognition_services": "Available; configured provider is Google speech services",
+    "current_build_log_sequence": [
+      "08:21:33.983 press",
+      "08:21:34.009 onError code=11",
+      "08:21:34.066 onReadyForSpeech",
+      "08:21:34.672 onBeginningOfSpeech",
+      "08:21:36.781 turn complete; stopping",
+      "08:21:37.510 onResults count=1"
+    ],
+    "additional_failure": "08:21:59.769 onError code=11 followed by turn complete at 08:22:02.517",
+    "error_meaning": "11 = ERROR_SERVER_DISCONNECTED",
+    "source": "https://developer.android.com/reference/android/speech/SpeechRecognizer#ERROR_SERVER_DISCONNECTED",
+    "code_finding": "Recognizer errors map to generic RECOGNIZER. Controller leaves capturing state immediately, so a later transcript for that turn is ignored.",
+    "unconfirmed_cause": "Recognizer is destroyed/recreated for each press; whether that triggers the provider disconnect needs targeted reproduction. Do not infer the provider crashed merely from code 11.",
+    "crash_logs": "An older September 9 pre-unlock crash exists; it predates the installed fixes. No new AndroidRuntime crash observed in the current-process filtered log."
+  },
+  "recommended_followup": [
+    "Correct artifact tool argument schemas and add an explicit bounded image-to-model handoff.",
+    "Provide reliable MCP inventory/status access and expose structured tool outcomes in the test API.",
+    "Add a persistent-chat API path to exercise real Outside photo/history behavior.",
+    "Repair and regression-test recognizer disconnect/recovery lifecycle; distinguish service failure from missing availability.",
+    "Replace nonempty-reply test success with assertions on actual tool outcomes."
+  ],
+  "application_code_changed": false,
+  "installed_during_diagnosis": false,
+  "messages_sent_or_calls_placed": false,
+  "oauth_implemented": false
+}

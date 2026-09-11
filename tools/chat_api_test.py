@@ -119,6 +119,18 @@ def main():
             reply = str(payload.get("reply", payload.get("error", "")))
             incomplete = "did not produce a final response" in reply.lower()
             result.update(status=status, passed=status == 200 and bool(reply.strip()) and not incomplete, reply=reply)
+            if "toolCalls" in payload:
+                result["toolCalls"] = payload["toolCalls"]
+            if case_id == "mcp_inventory":
+                inventory = payload.get("mcpInventory")
+                evidence = payload.get("toolCalls", [])
+                inventory_executed = any(c.get("tool") == "mcp_inventory" and c.get("success") is True and not c.get("error") for c in evidence)
+                inventory_valid = isinstance(inventory, dict) and isinstance(inventory.get("servers"), list) and isinstance(inventory.get("tools"), list)
+                result["passed"] = result["passed"] and inventory_executed and inventory_valid
+                if inventory_valid:
+                    result["mcpInventory"] = inventory
+                if not result["passed"]:
+                    result["error"] = "MCP inventory requires a successful app-backed tool result, not just a model reply."
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
             result.update(status=error.code, passed=False, error=detail or str(error))

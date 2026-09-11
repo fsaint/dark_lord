@@ -1,4 +1,6 @@
 <resources>
     <string name="device_admin_description">Allows Dark Lord to perform explicitly approved device administration tasks.</string>
     <string name="voice_capture_title">Dark Lord is listening</string>
+    <string name="shortcut_photo_short">Photo chat</string>
+    <string name="shortcut_photo_long">Take a picture and ask Dark Lord</string>
 </resources>

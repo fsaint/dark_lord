@@ -64,11 +64,15 @@ class ScopeRegistry {
     }
 }
 
+data class RemoteToolDefinition(val name: String, val description: String, val inputSchema: String)
+
 data class AgentContext(
     val resources: Set<String>,
     val memory: Map<String, List<String>>,
     val mcpResources: Set<String> = emptySet(),
     val skillResources: Set<String> = emptySet(),
+    val remoteTools: Map<String, RemoteToolDefinition> = emptyMap(),
+    val mcpInventory: List<String> = emptyList(),
 )
 
 class ScopedContextBuilder(

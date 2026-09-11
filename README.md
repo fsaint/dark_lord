@@ -15,6 +15,9 @@ The conversational harness and Stage 12 background-runtime acceptance coverage a
 ## Features
 
 - Side-button Assistant invocation with posture-aware open-screen and cover-screen experiences.
+- Samsung Side-button Photo chat shortcut: capture one picture, send it as multimodal input to the owner agent, and receive suggested next actions.
+- Persistent named chats with message history, photo thumbnails, silent typed replies, and a pinned **Outside chat** shared by side-button photos and voice questions. Start a fresh Outside chat without deleting the old thread.
+- Double press and long press interrupt conversational speech and superseded local work. Follow-up questions receive the saved photo itself, not just its previous description. Physical folded-phone acceptance of this new flow is still pending.
 - SMS receive, send, reply, delivery evidence, owner commands, and communications administration.
 - Dialer, incoming-call UI, CallKit-style in-call integration, and voice interaction services.
 - Notification listener and notification event ingestion.
@@ -29,14 +32,18 @@ The conversational harness and Stage 12 background-runtime acceptance coverage a
 - Unified owner-scoped background jobs for work that outlives a chat turn: `jobs.start`, `jobs.status`, `jobs.list`, `jobs.stop`, and `jobs.cancel`. Audio jobs can be started and stopped independently and produce bounded WAV artifacts; Python and sensor/radio logging jobs run under the same lifecycle, while unsupported media types report a truthful failure instead of pretending to complete.
 - Background job records survive process recreation as interrupted records, exclusive audio/video resources are guarded against overlap, and artifact results are returned as opaque IDs suitable for Telegram/local API delivery.
 - Owner-only OpenAI API-key setup stored in Android Keystore; credentials are excluded from diagnostics, messages, and audit output.
-- MCP connection foundations with scoped discovery, OAuth metadata, Streamable HTTP seams, private Tailscale server support, and network failure handling.
-- Owner-facing MCP server settings for saving and removing HTTPS endpoints with optional OAuth configuration.
+- Live no-auth HTTPS Streamable HTTP MCP: saved servers are initialized, their tools discovered, and authorized tools supplied to the shared conversational harness with typed arguments and real remote execution. One unavailable server does not disable phone tools.
+- App-backed `mcp_inventory` lets the agent report configured server status and available tools. The local chat API includes recorded tool outcomes so tests can verify execution independently of the model's reply.
+- Owner-facing MCP settings with connection status, discovered tool names/counts, last-check time, Refresh, and Remove. OAuth metadata is retained, but authenticated connections are not implemented in this release. Inbound MCP remains a protocol foundation, not a running listener.
 - Declarative skill manifests, validation, installation lifecycle, versioning, rollback, and scoped skill access.
 - Release signing, APK checksums, sideloading instructions, automated JVM/app tests, lint, and connected-device acceptance tests.
 
 ## Documentation
 
 - **[Getting started](docs/getting-started.md)** — build, install, provision, configure the model, and run the first SMS/voice test.
+- [Chats and Outside chat](docs/getting-started.md#chats-and-outside-chat) — named conversations, photo follow-ups, interruption, and retention.
+- [Connect an MCP server](docs/getting-started.md#add-an-mcp-server) — no-auth setup, discovery, access rules, and troubleshooting.
+- [Verify MCP through the phone API](docs/getting-started.md#verify-mcp-through-the-phone-api) — check inventory and an actual read-only remote tool call.
 - **[66-request local chat API device suite](docs/device-test/chat-api-50.md)** — exercise hardware, Python, artifacts, browser, MCP, skills, and background jobs through the development API.
 - **[Dark Lord device-testing skill](.agents/skills/dark-lord-device-testing/SKILL.md)** — reusable instructions for running and interpreting the 66-request phone API suite.
 
@@ -54,4 +61,4 @@ The conversational harness and Stage 12 background-runtime acceptance coverage a
 
 ## Intended stack
 
-Native Kotlin, Jetpack Compose, Room, Android Keystore, OpenAI Responses API, Streamable HTTP MCP with OAuth, and Tailscale for private inbound MCP access.
+Native Kotlin, Jetpack Compose, Room, Android Keystore, OpenAI Responses API, and outbound HTTPS Streamable HTTP MCP. OAuth and a live private inbound MCP listener remain future work.

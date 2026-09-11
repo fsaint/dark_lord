@@ -1,0 +1,50 @@
+{
+  "date": "2026-09-10",
+  "device": "SM-F711U1, Android 15 / API 35",
+  "installed_build_last_update": "2026-09-10 09:26:30 device time",
+  "scope": "No-auth outbound MCP discovery and execution through the installed phone's local chat API",
+  "transport": "Temporary adb USB forwarding; health returned ok=true, running=true",
+  "live_acceptance": {
+    "command": "python3 tools/mcp_api_smoke.py --url http://127.0.0.1:49416 --server test --read-only-tool whoami --report /tmp/dark-lord-mcp-api-live-2026-09-10.json",
+    "passed": true,
+    "duration_seconds": 19.26,
+    "inventory_prompt": "List the configured MCP servers and explain which are enabled.",
+    "inventory_execution": {"tool": "mcp_inventory", "success": true, "error": null, "verification": "VERIFIED"},
+    "server": {"name": "test", "status": "READY", "toolCount": 34},
+    "remote_tool": "whoami",
+    "remote_execution": {
+      "tool": "mcp_cad43063ae3d96f9358799301a6b3b9e083c8177d1e9ebfd",
+      "success": true,
+      "error": null,
+      "verification": "VERIFIED"
+    },
+    "remote_call_count": 1,
+    "both_stop_reasons": "FINAL_RESPONSE",
+    "evidence": "API exposes actual recorded ToolOutput outcomes; strict test matches the executed alias to the discovered server/tool. Model prose alone cannot pass.",
+    "redaction": "Endpoint, account details, arguments and raw remote results omitted."
+  },
+  "regression": {
+    "phone_api": "battery and mcp_inventory: 2/2 passed; inventory requires structured execution evidence",
+    "jvm_app_tests": {"tests": 533, "failures": 0, "errors": 0, "skipped": 0},
+    "python_smoke_validator_tests": "7 passed, including rejection of prose-only inventory and failed/mismatched remote execution",
+    "gradle": "test :app:lintDebug :app:assembleDebug: BUILD SUCCESSFUL",
+    "installation": ":app:installDebug: installed on 1 device; launch Status ok",
+    "logs": "No AndroidRuntime crash in current-process warning/error logs after installation; platform/JNI warnings present",
+    "review": "Scoped code review approved with no substantive findings"
+  },
+  "behavior_changes": [
+    "App-backed, authorization-scoped mcp_inventory tool and model guidance",
+    "Backward-compatible reply plus stopReason, toolCalls and optional mcpInventory API fields",
+    "HTTP body reads complete Content-Length bytes before UTF-8 decoding",
+    "Strict live MCP smoke test and stronger existing inventory test"
+  ],
+  "limitations": [
+    "No-auth outbound MCP only; OAuth and inbound MCP listener remain unimplemented",
+    "Stateless API does not validate persistent Outside chat history",
+    "Photo artifact handoff and speech-recognizer recovery findings remain separate unresolved work",
+    "One read-only remote tool tested, not all 34 server tools"
+  ],
+  "cleanup": "Restored Local chat API to disabled and removed temporary USB forward and UI dump",
+  "messages_sent_or_calls_placed": false,
+  "commit_or_push_performed": false
+}

@@ -1,6 +1,6 @@
 # Live MCP tools in the Dark Lord agent
 
-Status: base integration requested and approved in conversation; detailed design awaiting review.
+Status: approved in conversation, implemented and automatically verified on 2026-09-09. Live phone/server acceptance remains pending.
 
 ## Outcome and scope
 
@@ -8,7 +8,7 @@ A saved, reachable, unauthenticated HTTPS MCP server becomes usable by the owner
 
 This change covers outbound Streamable HTTP connections. OAuth, arbitrary authorization headers, stdio subprocesses, legacy two-endpoint HTTP+SSE servers, inbound MCP hosting, remote prompts/resources, sampling, elicitation and asynchronous MCP tasks remain separate features. An authentication challenge is shown as authentication required, not as a successful connection. No physical installation or live external tool invocation is implied by implementation.
 
-## Current failure
+## Failure before this implementation
 
 `DarkLordApplication.addMcpServer` saves an endpoint and puts only its UUID in `mcpCatalog`. `ScopedContextBuilder` filters those IDs, and `OpenAiResponsesProvider` mentions them in text. Neither discovers remote tools. The live `agentTools` dispatcher contains phone, Python, browser, artifact, job and Telegram handlers, but no MCP execution route.
 
@@ -68,4 +68,4 @@ Run full unit tests, lint and APK assembly. Device checks follow the project's d
 
 ## Review and next step
 
-Review this design, then write and execute the implementation plan. The earlier persistent-chat work remains untouched. Do not include those unrelated changes in the design commit or push anything.
+The [implementation plan](../plans/2026-09-09-live-mcp-agent-integration.md) is complete with automated evidence and independent review. Next: a separately requested non-destructive install and read-only live server acceptance. Earlier persistent-chat work was preserved; implementation remains uncommitted, with no push.

@@ -6,6 +6,11 @@ import com.fsaint.androidagent.model.ToolCall
 import com.fsaint.androidagent.model.ToolResult
 import com.fsaint.androidagent.policy.AgentContext
 import com.fsaint.androidagent.policy.ScopedToolRouter
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /** A model-facing request. The transcript is intentionally bounded by the harness. */
 data class ConversationRequest(
@@ -14,7 +19,25 @@ data class ConversationRequest(
     val context: AgentContext,
     val userText: String,
     val transcript: ConversationTranscript = ConversationTranscript(),
+    val image: ConversationImage? = null,
+    val priorMessages: List<PriorMessage> = emptyList(),
+    val chatImages: List<ConversationImage> = emptyList(),
+    val historyNotice: String = "",
+    val onToolResult: (suspend (Int, ToolCall, ToolResult<Any>) -> Unit)? = null,
+    val groundingNotice: String = "",
 )
+
+/** A bounded image captured or selected by an explicit foreground user action. */
+data class ConversationImage(
+    val mimeType: String,
+    val bytes: ByteArray,
+    val label: String? = null,
+) {
+    init {
+        require(mimeType.startsWith("image/")) { "Conversation images must use an image MIME type" }
+        require(bytes.isNotEmpty()) { "Conversation images must not be empty" }
+    }
+}
 
 sealed interface ConversationResponse {
     data class Tool(val call: ToolCall) : ConversationResponse
@@ -46,7 +69,7 @@ class InMemoryConversationCheckpointStore : ConversationCheckpointStore {
     override suspend fun remove(id: String) { entries.remove(id) }
 }
 
-enum class ConversationStopReason { FINAL_RESPONSE, TURN_LIMIT }
+enum class ConversationStopReason { FINAL_RESPONSE, TURN_LIMIT, CAPABILITY_UNVERIFIED }
 
 data class ConversationResult(
     val response: String?,
@@ -62,6 +85,7 @@ class ConversationHarness(
     private val checkpoints: ConversationCheckpointStore = InMemoryConversationCheckpointStore(),
     private val maxTurns: Int = MAX_TURNS,
     private val toolEffects: EventStore? = null,
+    private val extension: ConversationToolExtension? = null,
 ) {
     init { require(maxTurns in 1..MAX_TURNS) }
 
@@ -76,11 +100,39 @@ class ConversationHarness(
         return try { execute(request.copy(transcript = saved), saved) } finally { checkpoints.remove(conversationId) }
     }
 
-    private suspend fun execute(request: ConversationRequest, starting: ConversationTranscript): ConversationResult {
+    private suspend fun execute(original: ConversationRequest, starting: ConversationTranscript): ConversationResult {
+        val remote = try { extension?.prepare(original.session) ?: ConversationToolSnapshot() }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (_: Exception) { ConversationToolSnapshot(inventory = listOf("MCP discovery unavailable. Phone tools remain available.")) }
+        val definitions = remote.definitions.entries.take((128 - original.context.resources.size).coerceAtLeast(0)).associate { it.toPair() }
+        val request = original.copy(context = original.context.copy(remoteTools = definitions,
+            mcpInventory = remote.inventory + if (definitions.size < remote.definitions.size) listOf("Some MCP tools were omitted to fit the model tool limit.") else emptyList()))
         var transcript = starting
+        var groundingNotice = ""
+        var correctedAccessDenial = false
         val calls = transcript.turns.filterIsInstance<ConversationTurn.AssistantTool>().map { it.call }.toMutableList()
         while (transcript.nextTurn < maxTurns) {
-            val response = model.respond(request.copy(transcript = transcript))
+            currentCoroutineContext().ensureActive()
+            var response = model.respond(request.copy(transcript = transcript, groundingNotice = groundingNotice,
+                priorMessages = if (correctedAccessDenial) CapabilityGrounding.correctionHistory(request.priorMessages) else request.priorMessages))
+            currentCoroutineContext().ensureActive()
+            if (response is ConversationResponse.Final && definitions.keys.any { it != MCP_INVENTORY_TOOL } &&
+                CapabilityGrounding.unverifiedDenial(response.text, transcript)) {
+                if (correctedAccessDenial) {
+                    transcript = transcript.copy(turns = transcript.turns + ConversationTurn.AssistantFinal(CapabilityGrounding.UNVERIFIED), nextTurn = transcript.nextTurn + 1)
+                    return ConversationResult(CapabilityGrounding.UNVERIFIED, transcript, transcript.nextTurn, calls, ConversationStopReason.CAPABILITY_UNVERIFIED)
+                }
+                correctedAccessDenial = true
+                groundingNotice = CapabilityGrounding.CORRECTION
+                // Only app-backed read-only inventory is automatic. All task actions still require
+                // model selection, the original user request, and the existing scope/effect checks.
+                if (MCP_INVENTORY_TOOL in definitions && transcript.turns.filterIsInstance<ConversationTurn.ToolOutput>().none { it.call.name == MCP_INVENTORY_TOOL }) {
+                    response = ConversationResponse.Tool(ToolCall(MCP_INVENTORY_TOOL))
+                } else {
+                    transcript = transcript.copy(nextTurn = transcript.nextTurn + 1)
+                    continue
+                }
+            }
             when (response) {
                 is ConversationResponse.Final -> {
                     transcript = transcript.copy(
@@ -106,6 +158,7 @@ class ConversationHarness(
                         return ConversationResult(message, transcript, transcript.nextTurn, calls, ConversationStopReason.FINAL_RESPONSE)
                     }
                     calls += response.call
+                    currentCoroutineContext().ensureActive()
                     val executionCall = response.call.withConversationRecipient(request)
                     val turn = transcript.nextTurn
                     val result: ToolResult<Any> = when (val effect = toolEffects?.reserveToolEffect(request.event.id, executionCall, turn)) {
@@ -114,19 +167,29 @@ class ConversationHarness(
                         ToolEffectReservation.Reserved, null -> {
                             // A capability must not be able to abort the whole conversation.
                             // Return failures to the model so it can explain or recover.
-                            val executed = runCatching { tools.execute(request.session, executionCall) }
+                            val executed = runCatching {
+                                if (executionCall.name in definitions) remote.execute(executionCall)
+                                else tools.execute(request.session, executionCall)
+                            }
                                 .getOrElse {
+                                    if (it is CancellationException) {
+                                        withContext(NonCancellable) { request.onToolResult?.invoke(turn, executionCall,
+                                            ToolResult(false, payload = "Interrupted while executing; outcome unknown. Do not automatically retry.", error = com.fsaint.androidagent.model.ToolError.FAILED)) }
+                                        throw it
+                                    }
                                     ToolResult(false, error = com.fsaint.androidagent.model.ToolError.FAILED, recoverable = true)
                                 }
-                            toolEffects?.completeToolEffect(
+                            withContext(NonCancellable) { toolEffects?.completeToolEffect(
                                 request.event.id,
                                 executionCall,
                                 turn,
                                 executed,
-                            )
+                            ) }
                             executed
                         }
                     }
+                    withContext(NonCancellable) { request.onToolResult?.invoke(turn, executionCall, result) }
+                    currentCoroutineContext().ensureActive()
                     transcript = transcript.copy(
                         turns = transcript.turns + ConversationTurn.AssistantTool(response.call) + ConversationTurn.ToolOutput(response.call, result),
                         nextTurn = transcript.nextTurn + 1,

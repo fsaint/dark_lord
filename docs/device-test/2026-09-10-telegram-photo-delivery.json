@@ -1,0 +1,53 @@
+{
+  "date": "2026-09-10",
+  "device": "SM-F711U1",
+  "issue": "Side-key photo could not be sent over Telegram from the Outside chat",
+  "observed_before": {
+    "user_request": "can you send the pictures to me or Telegram",
+    "assistant_reply": "I can't directly send the pictures to you through Telegram. However, I can help you share the picture by preparing it for you...",
+    "tool_calls": "none (no DarkLordTools log line for the request window)",
+    "device_config": "no telegram_bot_token in dark_lord_secure_credentials; telegram_identity.xml (owner chat id) absent"
+  },
+  "cause_verified_in_code_and_tests": [
+    "telegram.send_photo was described only as 'Phone capability: telegram.send_photo' with an undocumented artifactId argument.",
+    "Instructions said 'Conversation channel: LOCAL_API. Use the current channel for replies and media', which the model read as forbidding Telegram delivery from typed chat.",
+    "CapabilityGrounding denial regex matched can't access/read/use/... but not can't send, so the corrective pass never ran.",
+    "TelegramPhotoSender returned a bare PERMISSION_REQUIRED with no explanation when the owner chat id or bot token was missing.",
+    "artifact.metadata and artifact.open were advertised with an empty parameter schema and additionalProperties=false."
+  ],
+  "change": [
+    "Per-tool descriptions for telegram.send_photo, artifact.metadata, artifact.open; artifactId documented and required.",
+    "Channel instruction now says to reply on the current channel but call telegram_send_photo regardless of channel when asked; saved-photo preamble allows sending by artifact id.",
+    "Denial guard verbs extended with send|share|deliver|forward.",
+    "TelegramPhotoSender returns actionable payloads for missing owner chat id and missing bot token."
+  ],
+  "regression_red": {
+    "OpenAiResponsesProviderTest.describesPhotoDeliveryAndArtifactToolsSoTypedChatsCanSendToTelegram": "failed on old wording",
+    "CapabilityGroundingTest.unverifiedSendDenialIsCorrectedLikeAnAccessDenial": "failed: denial returned uncorrected",
+    "TelegramPhotoSenderTest (2 cases)": "failed: payload null"
+  },
+  "validation": {
+    "command": "JAVA_HOME=/opt/homebrew/opt/openjdk ./gradlew test :app:lintDebug :app:assembleDebug --no-daemon --max-workers=2",
+    "test_case_executions": 582,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "lint_errors": 0,
+    "lint_warnings": 63
+  },
+  "install": {
+    "method": ":app:installDebug in-place; no uninstall or data clearing",
+    "last_update_time": "2026-09-10 20:19:42 device time",
+    "first_install_time_unchanged": true
+  },
+  "live_acceptance": {
+    "unintended_capture": "Operator error during verification: PhotoConversationActivity was launched with a misspelled view-result extra, so one real photo (monitor and desk) was captured, added to the Outside chat, and spoken aloud. Nothing was sent anywhere. That photo served as the target for the follow-up.",
+    "typed_request": "send that picture to me on Telegram (Outside chat, channel LOCAL_API)",
+    "tool_log": "DarkLordTools: channel=LOCAL_API turn=0 tool=telegram.send_photo success=false error=PERMISSION_REQUIRED verification=UNVERIFIED",
+    "assistant_reply": "I can't send the picture to you on Telegram because the necessary permissions are not set up. You will need to configure your Telegram chat ID in the settings.",
+    "result": "Model now selects the delivery tool and reports the real blocker instead of denying the capability.",
+    "not_verified": "Actual Telegram delivery: the phone has no bot token or owner chat id saved. After saving both in Settings, repeat the request and expect success=true verification=VERIFIED and the photo in Telegram.",
+    "api_note": "POST /chat on the local chat API is stateless and bypasses ChatTurnCoordinator, so it cannot exercise this Outside-chat follow-up; it can cover the single-turn camera.capture -> telegram.send_photo variant once Telegram is configured."
+  },
+  "messages_sent_or_calls_placed": false
+}

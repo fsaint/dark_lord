@@ -46,6 +46,7 @@ dependencies {
     implementation(libs.androidx.sqlite)
     implementation(libs.sqlcipher.android)
     implementation(libs.kotlinx.coroutines.core)
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     ksp(libs.androidx.room.compiler)
 

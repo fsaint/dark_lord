@@ -10,6 +10,9 @@ data class McpConnection(
 )
 
 data class McpToolDescriptor(val name: String, val description: String)
+/** Reads the existing endpoint/NUL/OAuth-fields format without rewriting saved settings. */
+fun decodeMcpConfiguration(id: String, name: String, bytes: ByteArray): McpConnection =
+    McpConnection(id, name, bytes.toString(Charsets.UTF_8).substringBefore('\u0000').trim())
 data class McpToolCall(val connectionId: String, val name: String, val arguments: Map<String, String> = emptyMap())
 
 sealed interface McpCallResult {

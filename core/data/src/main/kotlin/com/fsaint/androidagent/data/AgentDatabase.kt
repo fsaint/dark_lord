@@ -97,13 +97,25 @@ import com.fsaint.androidagent.model.VerificationState
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putVerificationOutcome(value: VerificationOutcomeEntity)
 }
 
-@Database(entities = [PrincipalEntity::class, ScopeGrantEntity::class, SessionEntity::class, EventEntity::class, PendingReplyEntity::class, ToolEffectEntity::class, ConversationMessageEntity::class, MemoryEntryEntity::class, ScheduleEntity::class, CapabilityStatusEntity::class, McpConfigurationEntity::class, OAuthMetadataEntity::class, SkillEntity::class, SkillVersionEntity::class, SkillUpdateAttemptEntity::class, EscalationEntity::class, ToolExecutionEntity::class, VerificationOutcomeEntity::class, AuditRecordEntity::class], version = 6, exportSchema = true)
+@Database(entities = [ChatEntity::class, OutsideChatEntity::class, ChatRequestEntity::class, ChatMessageEntity::class, ChatAttachmentEntity::class, PrincipalEntity::class, ScopeGrantEntity::class, SessionEntity::class, EventEntity::class, PendingReplyEntity::class, ToolEffectEntity::class, ConversationMessageEntity::class, MemoryEntryEntity::class, ScheduleEntity::class, CapabilityStatusEntity::class, McpConfigurationEntity::class, OAuthMetadataEntity::class, SkillEntity::class, SkillVersionEntity::class, SkillUpdateAttemptEntity::class, EscalationEntity::class, ToolExecutionEntity::class, VerificationOutcomeEntity::class, AuditRecordEntity::class], version = 7, exportSchema = true)
 abstract class AgentDatabase : RoomDatabase() {
+    abstract fun chatDao(): ChatDao
     abstract fun eventDao(): EventDao
     abstract fun auditRecordDao(): AuditRecordDao
     abstract fun durableStateDao(): DurableStateDao
 
     companion object {
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS chats (id TEXT NOT NULL PRIMARY KEY, ownerId TEXT NOT NULL, title TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, archived INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS outside_chats (ownerId TEXT NOT NULL PRIMARY KEY, chatId TEXT NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS chat_requests (id TEXT NOT NULL PRIMARY KEY, chatId TEXT NOT NULL, source TEXT NOT NULL, state TEXT NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_chat_requests_chatId ON chat_requests(chatId)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS chat_messages (id TEXT NOT NULL PRIMARY KEY, chatId TEXT NOT NULL, requestId TEXT NOT NULL, sequence INTEGER NOT NULL, role TEXT NOT NULL, text TEXT NOT NULL)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_chat_messages_chatId_sequence ON chat_messages(chatId, sequence)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS chat_attachments (messageId TEXT NOT NULL PRIMARY KEY, artifactId TEXT NOT NULL)")
+            }
+        }
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_principals_e164 ON principals (e164)")
@@ -141,7 +153,7 @@ abstract class AgentDatabase : RoomDatabase() {
 
 object AgentDatabaseTestFactory {
     fun open(context: Context, name: String): AgentDatabase = Room.databaseBuilder(context, AgentDatabase::class.java, name)
-        .addMigrations(AgentDatabase.MIGRATION_1_2, AgentDatabase.MIGRATION_2_3, AgentDatabase.MIGRATION_3_4, AgentDatabase.MIGRATION_4_5, AgentDatabase.MIGRATION_5_6)
+        .addMigrations(AgentDatabase.MIGRATION_1_2, AgentDatabase.MIGRATION_2_3, AgentDatabase.MIGRATION_3_4, AgentDatabase.MIGRATION_4_5, AgentDatabase.MIGRATION_5_6, AgentDatabase.MIGRATION_6_7)
         .allowMainThreadQueries()
         .build()
     fun inMemory(context: Context): AgentDatabase = Room.inMemoryDatabaseBuilder(context, AgentDatabase::class.java).allowMainThreadQueries().build()

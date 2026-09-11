@@ -27,7 +27,7 @@ fun AssistantSurface(state: VoiceTurnState, onTap: () -> Unit, compact: Boolean)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .clickable(enabled = state == VoiceTurnState.Listening, onClick = onTap)
+                .clickable(enabled = state == VoiceTurnState.Listening || state == VoiceTurnState.Recovering, onClick = onTap)
                 .padding(if (compact) 8.dp else 24.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -62,6 +62,7 @@ fun OpenAssistantSurface(state: VoiceTurnState, onTap: () -> Unit) = AssistantSu
 internal fun assistantLabel(state: VoiceTurnState): String = when (state) {
     VoiceTurnState.Idle -> "Hold the side key and speak"
     VoiceTurnState.Listening -> "Listening…"
+    VoiceTurnState.Recovering -> "Reconnecting speech… Tap to cancel"
     VoiceTurnState.Finalizing -> "…"
     VoiceTurnState.Thinking -> "Thinking…"
     is VoiceTurnState.Responding -> state.text
